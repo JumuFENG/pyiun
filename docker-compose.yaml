@@ -1,0 +1,14 @@
+services:
+  iun:
+    image: iun:latest
+    container_name: iun
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - /Users/chuazhou/dev/log-viewer/logs:/home/pyuser/pyiun/logs
+      - /Users/chuazhou/dev/pyiun/config:/home/pyuser/pyiun/config
+      - /Users/chuazhou/dev/pyiun/app:/home/pyuser/pyiun/app
+      - /Users/chuazhou/dev/pyiun/iun.py:/home/pyuser/pyiun/iun.py
+      - /Users/chuazhou/dev/pyiun/iun_docker.py:/home/pyuser/pyiun/iun_docker.py
+    # entrypoint: ["/home/pyuser/venv/bin/python", "iun_docker.py"]
+    restart: unless-stopped
