@@ -149,12 +149,15 @@ class Account(object):
             self.save_stock_strategy(code, stock['strategies'])
 
     def verify_not_traded(self, stock):
+        if stock['holdCount'] <= 0:
+            return False
         return self.verify_zt_top_reached(stock)
 
     def verify_zt_top_reached(self, stock):
         '''
         如果当日涨停或接近目标价，调整卖出策略
         '''
+
         code = stock['code']
         sqt = klPad.get_quotes(code)
         if not sqt:

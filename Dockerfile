@@ -17,7 +17,7 @@ COPY --chown=pyuser:pyuser ./packages ./packages/
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
     pip install ./packages/*.whl && \
-    rm -f ./packages/
+    rm -rf ./packages/
 
 # 复制应用代码
 COPY --chown=pyuser:pyuser ./app ./app/
