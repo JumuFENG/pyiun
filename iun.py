@@ -8,7 +8,7 @@ from app.trade_interface import TradeInterface
 from app.accounts import accld
 from app.klpad import klPad, DsvrKSource
 from app.intrade_base import iunCloud
-from app.strategy_factory import StrategyFactory
+from app.strategy_factory import StrategyFactory, GlobalStartup
 
 
 class iun:
@@ -48,7 +48,7 @@ class iun:
         asrt.set_array_format(srtcfg.get('array_format', 'df'))
         accld.load_accounts()
 
-        strategies = StrategyFactory.market_strategies()
+        strategies = [GlobalStartup()] + [s for s in StrategyFactory.market_strategies() if s.key in TradeInterface.iun_str()]
         for task in strategies:
             task.on_intrade_matched = cls.intrade_matched
             await task.start_strategy_tasks()

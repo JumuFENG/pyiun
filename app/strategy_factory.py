@@ -9,7 +9,7 @@ class StrategyFactory():
     @classmethod
     def market_strategies(cls):
         return [
-            GlobalStartup(), StrategyI_AuctionUp(), StrategyI_Zt1Bk(), StrategyI_EndFundFlow(), StrategyI_DeepBigBuy(),
+            StrategyI_AuctionUp(), StrategyI_Zt1Bk(), StrategyI_EndFundFlow(), StrategyI_DeepBigBuy(),
             StrategyI_3Bull_Breakup(), StrategyI_Zt1WbOpen(), StrategyI_HotrankOpen(), StrategyI_HotStocksOpen(),
             StrategyI_DtStocksUp(), StrategyI_HotstocksRetryZt0()
         ]

@@ -758,7 +758,7 @@ class StrategyI_HotStocksOpen(MarketStrategy):
             # zrks = iunCloud.get_stocks_zdfrank(8)
             drks = iunCloud.get_stocks_zdfrank(-8)
 
-            dtcnt_open = len([r for r in drks if float(r['f2']) <= guang.dt_priceby(float(r['f18']), zdf=guang.zdf_from_code(r['f12']))])
+            dtcnt_open = len([r for r in drks if float(r['close']) <= guang.dt_priceby(float(r['lcose']), zdf=guang.zdf_from_code(r['code'].upper()))])
             logger.info('last dtcnt=%d today open dtcnt=%d', self.lastzdt[3], dtcnt_open)
 
             if self.lastzdt[3] > 10:
@@ -897,7 +897,7 @@ class StrategyI_DtStocksUp(BaseStrategy):
             return
 
         drks = iunCloud.get_stocks_zdfrank(-8)
-        dtcnt_open = len([r for r in drks if float(r['f2']) <= guang.dt_priceby(float(r['f18']), zdf=guang.zdf_from_code(r['f12']))])
+        dtcnt_open = len([r for r in drks if float(r['close']) <= guang.dt_priceby(float(r['lclose']), zdf=guang.zdf_from_code(r['code'].upper()))])
         logger.info('last dtcnt=%d today open dtcnt=%d', lastdt, dtcnt_open)
         if dtcnt_open > 0:
             logger.info(f'{self.__class__.name} no dtcnt_open, skip')
@@ -928,17 +928,17 @@ class StrategyI_DtStocksUp(BaseStrategy):
     async def on_watcher1(self):
         # 开盘三分钟
         drks = iunCloud.get_stocks_zdfrank(-8)
-        drks = [r for r in drks if r['f3'] <= -8]
-        if len([r for r in drks if r['f3'] <= -10]) > 15:
+        drks = [r for r in drks if r['change'] <= -0.08]
+        if len([r for r in drks if r['change'] <= -0.10]) > 15:
             logger.info(f'{self.__class__.name} more stocks zdf < 10 than 15')
             return
-        dstocks = [r for r in drks if float(r['f2']) <= guang.dt_priceby(float(r['f18']), zdf=guang.zdf_from_code(r['f12']))]
-        dstocks = [r for r in dstocks if not r['f14'].startswith('退市') and not r['f14'].endswith('退') and 'ST' not in r['f14']]
+        dstocks = [r for r in drks if float(r['close']) <= guang.dt_priceby(float(r['lclose']), zdf=guang.zdf_from_code(r['code'].upper()))]
+        dstocks = [r for r in dstocks if not r['name'].startswith('退市') and not r['name'].endswith('退') and 'ST' not in r['name']]
         if len(dstocks) > 10:
             logger.info(f'{self.__class__.name} more stocks dt than 10')
             return
 
-        dstocks = [r['f12'] for r in dstocks]
+        dstocks = [r['code'] for r in dstocks]
         qkls = asrt.qklines(dstocks, 101, 32)
         for c, qk in qkls.items():
             klPad.cache(c, qk['klines'], qk['qt'], kltype=101)

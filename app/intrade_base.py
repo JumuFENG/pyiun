@@ -210,38 +210,12 @@ class iunCloud:
 
     @staticmethod
     def get_stocks_zdfrank(minzdf=None):
-        # http://quote.eastmoney.com/center/gridlist.html#hs_a_board
-        pn = 1
-        po = 1 if minzdf is None or minzdf > 0 else 0
-        zdfranks = []
-        pgsize = 1000
-        if minzdf is not None:
-            pgsize = 200
-        urlfmt = (
-            'http://33.push2.eastmoney.com/api/qt/clist/get?pn=%d&pz=%d&po=%d&np=1'
-            '&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&wbp2u=|0|0|0|web&fid=f3'
-            '&fs=m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2'
-            '&fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f22,f11,f62,f115,f152')
-        while True:
-            rankUrl = urlfmt % (pn, pgsize, po)
-            header = guang.em_headers(Host='33.push2.eastmoney.com', Cookie=EmCookie.get_cookie())
-            res = guang.get_request(rankUrl, headers=header)
-            if res is None:
-                break
-
-            r = json.loads(res)
-            if r['data'] is None or len(r['data']['diff']) == 0:
-                break
-
-            zdfranks += [rk for rk in r['data']['diff'] if rk['f3'] != '-']
-            if len(zdfranks) == 0:
-                break
-            if minzdf is not None and abs(zdfranks[-1]['f3']) < abs(minzdf):
-                break
-            if r['data']['total'] > len(zdfranks) and len(r['data']['diff']) < pgsize:
-                pgsize = len(r['data']['diff'])
-            pn += 1
-        return zdfranks
+        stocks = asrt.stock_list()
+        if minzdf is None:
+            return stocks
+        if minzdf < 0:
+            stocks = reversed(stocks)
+        return [s for s in stocks if abs(s['change']) >= abs(minzdf)]
 
     @staticmethod
     def get_zdfb():
@@ -552,17 +526,17 @@ class StkZdfJobProcess(JobProcess):
         self.min_zdf = 8
 
     def process_job(self, indata):
-        zdfranks = iunCloud.get_stocks_zdfrank(self.min_zdf)
         full_zdf = []
+        zdfranks = iunCloud.get_stocks_zdfrank(self.min_zdf)
         for rkobj in zdfranks:
-            c = rkobj['f2']   # 最新价
-            zd = rkobj['f3']  # 涨跌幅
+            c = rkobj['close']   # 最新价
+            zd = rkobj['change'] * 100  # 涨跌幅
             if c == '-' or zd == '-':
                 continue
             if zd < self.min_zdf:
                 break
-            code = rkobj['f12'] # 代码
-            lc = rkobj['f18'] # 昨收
+            code = rkobj['code'][-6:] # 代码
+            lc = rkobj['lcose'] # 昨收
             full_zdf.append([code, zd, c, lc])
         return full_zdf
 
