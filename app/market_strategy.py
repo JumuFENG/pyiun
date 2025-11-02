@@ -71,6 +71,7 @@ class GlobalStartup(BaseStrategy):
         # t = time.time()
         # q = tdx.quotes(stocks)
         # logger.info('get quotes used time %f', time.time() - t)
+        asrt.set_default_sources('mklines', 'mklineapi', ('tencent', 'ths', 'sina'), True)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
         for klt in [1, 15]:
             t = time.time()
@@ -758,7 +759,7 @@ class StrategyI_HotStocksOpen(MarketStrategy):
             # zrks = iunCloud.get_stocks_zdfrank(8)
             drks = iunCloud.get_stocks_zdfrank(-8)
 
-            dtcnt_open = len([r for r in drks if float(r['close']) <= guang.dt_priceby(float(r['lcose']), zdf=guang.zdf_from_code(r['code'].upper()))])
+            dtcnt_open = len([r for r in drks if float(r['close']) <= guang.dt_priceby(float(r['lclose']), zdf=guang.zdf_from_code(r['code'].upper()))])
             logger.info('last dtcnt=%d today open dtcnt=%d', self.lastzdt[3], dtcnt_open)
 
             if self.lastzdt[3] > 10:

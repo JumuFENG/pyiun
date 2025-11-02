@@ -211,6 +211,9 @@ class iunCloud:
     @staticmethod
     def get_stocks_zdfrank(minzdf=None):
         stocks = asrt.stock_list()
+        if stocks is None or 'all' not in stocks:
+            return []
+        stocks = stocks['all']
         if minzdf is None:
             return stocks
         if minzdf < 0:
@@ -525,6 +528,9 @@ class StkZdfJobProcess(JobProcess):
         super().__init__(task_queue, result_queue, period)
         self.min_zdf = 8
 
+    def process_prepare(self):
+        asrt.set_default_sources('stock_list', 'stocklistapi', ('sina', 'cls', 'tencent', 'xueqiu'), False)
+
     def process_job(self, indata):
         full_zdf = []
         zdfranks = iunCloud.get_stocks_zdfrank(self.min_zdf)
@@ -536,7 +542,7 @@ class StkZdfJobProcess(JobProcess):
             if zd < self.min_zdf:
                 break
             code = rkobj['code'][-6:] # 代码
-            lc = rkobj['lcose'] # 昨收
+            lc = rkobj['lclose'] # 昨收
             full_zdf.append([code, zd, c, lc])
         return full_zdf
 
