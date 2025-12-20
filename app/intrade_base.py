@@ -10,7 +10,7 @@ from typing import Dict, List, ClassVar, Optional, TYPE_CHECKING
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
 import stockrt as asrt
-from stockrt.sources.eastmoney import EmCookie
+from stockrt.sources.eastmoney import Em
 from app.lofig import logger, Config
 from app.guang import guang
 from app.klpad import klPad
@@ -170,12 +170,12 @@ class iunCloud:
         return bk in self.topbks5()
 
     @staticmethod
-    @lru_cache(maxsize=1)
-    def get_hotstocks():
+    @lru_cache(maxsize=10)
+    def get_hotstocks(days=5):
         url = guang.join_url(iunCloud.dserver, 'stock')
         params = {
             'act': 'hotstocks',
-            'days': 5
+            'days': days
         }
         return json.loads(guang.get_request(url, params=params))
 
@@ -210,15 +210,31 @@ class iunCloud:
 
     @staticmethod
     def get_stocks_zdfrank(minzdf=None):
-        stocks = asrt.stock_list()
-        if stocks is None or 'all' not in stocks:
-            return []
-        stocks = stocks['all']
         if minzdf is None:
-            return stocks
-        if minzdf < 0:
-            stocks = reversed(stocks)
-        return [s for s in stocks if abs(s['change']) >= abs(minzdf)]
+            stocks = asrt.stock_list()
+            if stocks is None or 'all' not in stocks:
+                return []
+            return stocks['all']
+
+        clist = Em.qt_clist(
+            fs='m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2',
+            fields='f1,f2,f3,f4,f5,f6,f15,f16,f17,f18,f12,f13,f14',
+            fid='f3', po=1 if minzdf > 0 else 0,
+            qtcb=lambda data: any(abs(d['f3']) < abs(minzdf) for d in data)
+        )
+        return [{
+            'code': asrt.get_fullcode(s['f12']),
+            'name': s['f14'],
+            'close': float(s['f2']),
+            'high': float(s['f15']) if s['f15'] != '-' else 0,
+            'low': float(s['f16']) if s['f16'] != '-' else 0,
+            'open': float(s['f17']) if s['f17'] != '-' else 0,
+            'lclose': float(s['f18']),
+            'change_px': float(s['f4']),
+            'change': float(s['f3']) / 100,
+            'volume': (int(s['f5']) if s['f5'] != '-' else 0) * 100,
+            'amount': float(s['f6']) if s['f6'] != '-' else 0
+        } for s in clist if s['f2'] != '-' and s['f18'] != '-']
 
     @staticmethod
     def get_zdfb():
@@ -294,7 +310,7 @@ class iunCloud:
     def get_financial_4season_losing(cls):
         try:
             pdata = search_wencai(query='连续4个季度亏损大于1000万', loop=True)
-            logger.info('连续4个季度亏损大于1000万: %d', len(pdata['code']))
+            logger.info('连续4个季度亏损大于1000万: %d', len(pdata))
             return tuple(pdata['code'])
         except Exception as e:
             logger.info('search_wencai error: %s', e)
@@ -544,6 +560,7 @@ class StkZdfJobProcess(JobProcess):
             code = rkobj['code'][-6:] # 代码
             lc = rkobj['lclose'] # 昨收
             full_zdf.append([code, zd, c, lc])
+        logger.info('StkZdfJobProcess %s stocks > %d', len(full_zdf), self.min_zdf)
         return full_zdf
 
 

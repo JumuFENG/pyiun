@@ -16,12 +16,12 @@ from app.intrade_base import iunCloud
 
 
 class TestVerifyStrategies(unittest.TestCase):
-    
+
     def setUp(self):
         """测试前的设置"""
         # 创建测试账户
         self.account = Account('test_account')
-        
+
         # 模拟股票数据
         self.sample_stock_data = {
             "code": "603879",
@@ -76,7 +76,7 @@ class TestVerifyStrategies(unittest.TestCase):
             "holdCost": 7.786,
             "latestPrice": 7.18
         }
-        
+
         # 模拟行情数据
         self.mock_quotes = {
             'price': 7.18,
@@ -97,11 +97,11 @@ class TestVerifyStrategies(unittest.TestCase):
         """测试有zt1bk交易备注的策略验证"""
         # 设置模拟返回值
         mock_guang.today_date.return_value = '2025-08-25'
-        
+
         # 修改样本数据，设置高于昨收9%的价格以触发zt1bk策略
         high_quotes = self.mock_quotes.copy()
         high_quotes['high'] = 7.85  # 高于昨收7.20的9%
-        
+
 
         self.sample_stock_data['strategies']['buydetail'] = [
             {"id": 1238,"code": "SH603879","date": "2025-08-04","count": 300,"price": 7.1,"sid": "422886","type": "B"},
@@ -126,36 +126,36 @@ class TestVerifyStrategies(unittest.TestCase):
             'buydetail': [],
             'buydetail_full': []
         }
-        
+
         # 设置账户的trading_remarks
         self.account.trading_remarks = {'603879': 'istrategy_zt1bk'}
-        
+
         # 模拟save_stock_strategy方法
         self.account.save_stock_strategy = Mock()
-        
+
         # 模拟get_strategy_meta方法
         self.account.get_strategy_meta = Mock(return_value=None)
-        
+
         # 执行测试
         self.account.verify_strategies()
-        
+
         # 验证结果
         mock_iuncloud.get_account_latest_stocks.assert_called_once_with('test_account')
         mock_quotes_func.assert_called_once_with(['603879'])
         mock_klpad.cache.assert_called_once()
-        
+
         # 验证save_stock_strategy被调用并检查参数
         self.account.save_stock_strategy.assert_called()
-        
+
         # 获取调用参数进行详细验证
         call_args = self.account.save_stock_strategy.call_args
         self.assertIsNotNone(call_args, "save_stock_strategy should have been called with arguments")
-        
+
         args, kwargs = call_args
         # 验证第一个参数是股票代码
         self.assertTrue(len(args) >= 1, "save_stock_strategy should be called with at least 1 argument")
         self.assertEqual(args[0], '603879', "First argument should be stock code")
-        
+
         # 验证第二个参数是策略数据
         if len(args) >= 2:
             strategy_data = args[1]
@@ -171,20 +171,20 @@ class TestVerifyStrategies(unittest.TestCase):
         # 创建无持仓的股票数据
         no_holding_stock = self.sample_stock_data.copy()
         no_holding_stock['holdCount'] = 0
-        
+
         mock_guang.today_date.return_value = '2025-08-25'
         mock_iuncloud.get_account_latest_stocks.return_value = [no_holding_stock]
         mock_klpad.get_quotes.return_value = self.mock_quotes
-        
+
         # 模拟save_stock_strategy方法
         self.account.save_stock_strategy = Mock()
-        
+
         # 执行测试
         self.account.verify_strategies()
-        
+
         # 验证结果 - 应该调用verify_recycle_strategies
         self.account.save_stock_strategy.assert_called()
-        
+
         # 验证调用参数
         call_args = self.account.save_stock_strategy.call_args
         if call_args:
@@ -197,11 +197,11 @@ class TestVerifyStrategies(unittest.TestCase):
         """测试涨停价格达到时的策略调整"""
         with patch('app.accounts.klPad') as mock_klpad, \
              patch('app.accounts.guang') as mock_guang:
-            
+
             # 设置涨停价格
             zt_quotes = self.mock_quotes.copy()
             zt_quotes['price'] = 7.92  # 涨停价
-            
+
             mock_klpad.get_quotes.return_value = zt_quotes
             mock_klpad.get_zt_price.return_value = 7.92
             mock_guang.generate_strategy_json.return_value = {
@@ -210,17 +210,17 @@ class TestVerifyStrategies(unittest.TestCase):
                     '1': {'key': 'StrategySellBE', 'enabled': True}
                 }
             }
-            
+
             # 模拟save_stock_strategy方法
             self.account.save_stock_strategy = Mock()
-            
+
             # 执行测试
             result = self.account.verify_zt_top_reached(self.sample_stock_data)
-            
+
             # 验证结果
             self.assertTrue(result)
             self.account.save_stock_strategy.assert_called_once()
-            
+
             # 验证调用参数
             call_args = self.account.save_stock_strategy.call_args
             self.assertIsNotNone(call_args)
@@ -239,7 +239,7 @@ class TestVerifyStrategies(unittest.TestCase):
         """测试有zt1bk交易备注的策略验证"""
         # 设置模拟返回值
         mock_guang.today_date.return_value = '2025-09-01'
-        
+
         # 修改样本数据，设置高于昨收9%的价格以触发zt1bk策略
         mock_quotes = {
             'price': 14.64,
@@ -281,31 +281,31 @@ class TestVerifyStrategies(unittest.TestCase):
             'buydetail': [],
             'buydetail_full': []
         }
-        
+
         # 设置账户的trading_remarks
         self.account.keyword = 'normal'
         self.account.trading_remarks = {code: 'istrategy_hsrzt0'}
-        
+
         # 模拟save_stock_strategy方法
         self.account.save_stock_strategy = Mock()
-        
+
         # 模拟get_strategy_meta方法
         self.account.get_strategy_meta = Mock(return_value=None)
-        
+
         # 执行测试
         self.account.verify_strategies()
-        
+
         # 验证结果
         mock_iuncloud.get_account_latest_stocks.assert_called_once_with('normal')
         mock_quotes_func.assert_called_once_with([code])
         mock_klpad.cache.assert_called_once()
-        
+
         self.account.save_stock_strategy.assert_called_with(code, ANY)
-        
+
         # 验证调用参数
         call_args = self.account.save_stock_strategy.call_args
         self.assertIsNotNone(call_args, "save_stock_strategy should have been called")
-        
+
         args, kwargs = call_args
         # 验证策略数据结构
         if len(args) >= 2 and isinstance(args[1], dict):
@@ -317,18 +317,18 @@ class TestVerifyStrategies(unittest.TestCase):
         # 创建模拟账户
         mock_account1 = Mock()
         mock_account2 = Mock()
-        
+
         # 直接设置accld.all_accounts
         original_accounts = accld.all_accounts
         accld.all_accounts = {
             'account1': mock_account1,
             'account2': mock_account2
         }
-        
+
         try:
             # 执行测试
             accld.verify_strategies()
-            
+
             # 验证所有账户的verify_strategies都被调用
             mock_account1.verify_strategies.assert_called_once()
             mock_account2.verify_strategies.assert_called_once()
@@ -343,15 +343,15 @@ class TestVerifyStrategies(unittest.TestCase):
         mock_account = Mock()
         mock_account.verify_strategies.side_effect = Exception("Test exception")
         mock_account.keyword = 'test_account'
-        
+
         # 直接设置accld.all_accounts
         original_accounts = accld.all_accounts
         accld.all_accounts = {'test_account': mock_account}
-        
+
         try:
             # 执行测试
             accld.verify_strategies()
-            
+
             # 验证异常被正确处理和记录
             mock_logger.error.assert_called()
         finally:
@@ -371,17 +371,17 @@ class TestVerifyStrategies(unittest.TestCase):
                 }
             }
         }
-        
+
         # 测试获取存在的策略
         result = self.account.get_strategy_meta('603879', 'StrategyBSBE')
         self.assertIsNotNone(result)
         self.assertEqual(result['key'], 'StrategyBSBE')
         self.assertEqual(result['guardPrice'], 7.79)
-        
+
         # 测试获取不存在的策略
         result = self.account.get_strategy_meta('603879', 'NonExistentStrategy')
         self.assertIsNone(result)
-        
+
         # 测试获取不存在股票的策略
         result = self.account.get_strategy_meta('000001', 'StrategyBSBE')
         self.assertIsNone(result)
@@ -389,43 +389,43 @@ class TestVerifyStrategies(unittest.TestCase):
     def test_save_stock_strategy_parameter_validation_examples(self):
         """演示验证save_stock_strategy调用参数的多种方法"""
         from unittest.mock import Mock, ANY, call
-        
+
         # 模拟save_stock_strategy方法
         self.account.save_stock_strategy = Mock()
-        
+
         # 模拟调用
         test_strategy_data = {
             'strategies': {'1': {'key': 'TestStrategy', 'enabled': True}},
             'buydetail': [],
             'amount': 1000
         }
-        
+
         # 执行调用
         self.account.save_stock_strategy('603879', test_strategy_data)
-        
+
         # 方法1: 验证是否被调用
         self.account.save_stock_strategy.assert_called()
-        
+
         # 方法2: 验证调用次数
         self.account.save_stock_strategy.assert_called_once()
-        
+
         # 方法3: 验证具体参数
         self.account.save_stock_strategy.assert_called_with('603879', test_strategy_data)
-        
+
         # 方法4: 使用ANY匹配任意参数
         self.account.save_stock_strategy.assert_called_with('603879', ANY)
-        
+
         # 方法5: 获取调用参数进行详细验证
         call_args = self.account.save_stock_strategy.call_args
         args, kwargs = call_args
         self.assertEqual(args[0], '603879')
         self.assertEqual(args[1]['amount'], 1000)
         self.assertIn('strategies', args[1])
-        
+
         # 方法6: 验证所有调用记录
         all_calls = self.account.save_stock_strategy.call_args_list
         self.assertEqual(len(all_calls), 1)
-        
+
         # 方法7: 使用call对象验证
         expected_call = call('603879', test_strategy_data)
         self.assertIn(expected_call, all_calls)
@@ -433,13 +433,11 @@ class TestVerifyStrategies(unittest.TestCase):
 class TestIunCloudApis(unittest.TestCase):
     def test_getzdfranks(self):
         """测试iunCloud.getzdfranks方法"""
-        
         # 调用方法
-        result = iunCloud.get_stocks_zdfrank(minzdf=8)
-        
+        result = iunCloud.get_stocks_zdfrank(8)
         # 验证结果类型
         self.assertIsInstance(result, list)
-        
+
         # 验证涨跌幅是否符合条件
         for rank in result:
             self.assertIsInstance(rank, dict)
