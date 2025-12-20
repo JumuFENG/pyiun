@@ -209,6 +209,7 @@ class SubProcess_Watcher_Cycle(Watcher_Cycle):
         self.sub_process = None
         self.process_last_active = 0
         self._result_checker_task = None
+        self._monitor_process_task = None
 
     def feed_process_data(self):
         # 为子进程设置输入数据
@@ -226,13 +227,13 @@ class SubProcess_Watcher_Cycle(Watcher_Cycle):
         # 确保子进程运行
         self._ensure_process_running()
         self._result_checker_task = asyncio.create_task(self._check_result_queue())
+        self.process_last_active = time.time()
+        self._monitor_process_task = asyncio.create_task(self._monitor_process())
 
         while self.task_running:
             try:
                 self.feed_process_data()
                 self.process_last_active = time.time()
-                # 检查并维护子进程健康状态
-                await self._monitor_process()
 
                 sleep_duration = self._calculate_next_sleep_duration()
                 if sleep_duration > 0:
@@ -267,19 +268,24 @@ class SubProcess_Watcher_Cycle(Watcher_Cycle):
 
     async def _monitor_process(self):
         """监视子进程状态并处理异常"""
-        now = time.time()
+        while self.task_running:
+            await asyncio.sleep(5)
+            now = time.time()
 
-        # 检查进程是否存活
-        if self.sub_process is None or not self.sub_process.is_alive():
-            logger.warning("sub process is not alive, restarting...")
-            self._restart_process()
-            return
+            # 检查进程是否存活
+            if self.sub_process is None or not self.sub_process.is_alive():
+                logger.warning("%s sub process is not alive, restarting...", self.__class__.__name__)
+                self._restart_process()
+                continue
 
-        # 长时间无活动后重启进程
-        if now - self.process_last_active > min(self.period + 30, self.period * 3):
-            logger.info("Restarting idle sub process...")
-            self._restart_process()
-            return
+            # 长时间无活动后重启进程
+            if now - self.process_last_active > min(self.period + 30, self.period * 3):
+                logger.info("%s Restarting idle sub process...", self.__class__.__name__)
+                self._stop_process()
+                await asyncio.sleep(self._calculate_next_sleep_duration() - 10)
+                self._start_process()
+                await asyncio.sleep(10)
+                continue
 
         # TODO: 定期重启进程防止内存泄漏 if needed!
 
@@ -324,6 +330,8 @@ class SubProcess_Watcher_Cycle(Watcher_Cycle):
         await super().stop_simple_task(delay)
 
         # 取消结果检查任务
+        if self._monitor_process_task and not self._monitor_process_task.done():
+            self._monitor_process_task.cancel()
         if self._result_checker_task and not self._result_checker_task.done():
             self._result_checker_task.cancel()
             try:
