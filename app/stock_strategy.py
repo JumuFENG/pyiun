@@ -174,7 +174,7 @@ class StrategyBuySellBeforeEnd(StockStrategy):
         klclose = klines['close'].iloc[-1]
         if 'guardPrice' not in smeta:
             smeta['guardPrice'] = FnPs.buy_details_average_price(buydetails)
-        if klclose > smeta['guardPrice'] * 0.92:
+        if smeta['guardPrice'] > 0 and klclose > smeta['guardPrice'] * 0.92:
             return False
 
         if klines['close'].iloc[-1] <= klines['ma5'].iloc[-1] or klines['close'].iloc[-2] < klines['ma5'].iloc[-2]:
@@ -190,8 +190,8 @@ class StrategyBuySellBeforeEnd(StockStrategy):
 
         ztprice = klPad.get_zt_price(code)
         hcount = sum([b['count'] for b in buydetails])
-        lost = (smeta['guardPrice'] - klclose) * hcount if hcount > 0 else smeta['guardPrice']
-        if hcount == 0:
+        lost = (smeta['guardPrice'] - klclose) * hcount if smeta['guardPrice'] > 0 else abs(smeta['guardPrice'])
+        if smeta['guardPrice'] < 0:
             smeta['lost'] = lost
         sobj = accld.get_stock_strategy_group(acc, code)
         amount = lost / smeta['stepRate'] - klclose * hcount
@@ -202,8 +202,9 @@ class StrategyBuySellBeforeEnd(StockStrategy):
         count = guang.calc_buy_count(amount, klclose)
         price = round(min(ztprice, klclose * 1.01), 2)
         if count > 0:
-            smeta['guardPrice'] = round((klclose * count + (hcount * smeta['guardPrice'] if hcount > 0 else smeta['guardPrice'])) / (count + hcount), 2)
-            accld.planned_strategy_trade(acc, code, 'B', price, count)
+            smeta['guardPrice'] = round((klclose * count + (hcount * smeta['guardPrice'] if smeta['guardPrice'] > 0 else abs(smeta['guardPrice']))) / (count + hcount), 2)
+            tacc = smeta['account'] if 'account' in smeta else acc
+            accld.planned_strategy_trade(acc, code, 'B', price, count, tacc)
             return True
         return False
 
@@ -225,13 +226,15 @@ class StrategyBuySellBeforeEnd(StockStrategy):
         if klines['close'].iloc[-1] > klines['ma5'].iloc[-1] or klines['close'].iloc[-2] > klines['ma5'].iloc[-2]:
             return False
 
+        logger.info('check_sell_before_end %s %s %d %s', acc, code, self.kltype, smeta)
+        logger.info('%s', klines[-5:])
         dtprice = klPad.get_dt_price(code)
         price = round(max(dtprice, klclose * 0.99), 2)
         if 'guardPrice' not in smeta:
             smeta['guardPrice'] = FnPs.buy_details_average_price(buydetails)
         hcount = sum([b['count'] for b in buydetails])
         if hcount == count:
-            smeta['guardPrice'] = (smeta['guardPrice'] - klclose) * hcount
+            smeta['guardPrice'] = round((klclose - smeta['guardPrice']) * hcount, 2)
         else:
             smeta['guardPrice'] = round((smeta['guardPrice'] - klclose) * hcount / (hcount - count) + klclose, 2)
         accld.update_strategy_meta(acc, code, self.key, smeta)
@@ -251,6 +254,9 @@ class StrategySellMA(StockStrategy):
         self.watchers = [self.watcher]
 
     def add_stock(self, acc, code):
+        if code in iunCloud.get_suspend_stocks():
+            logger.info('%s is suspended', code)
+            return
         if (acc, code) not in self.accstocks:
             self.accstocks.append((acc, code))
         smeta = accld.get_strategy_meta(acc, code, self.key)
@@ -527,6 +533,7 @@ class StrategyBuyZTBoard(StockStrategy):
 
         if len(self.notified) >= self.max_notify:
             logger.info('%s too many stocks notified, skip %s, notified %s, max_notify %d', self.key, code, self.notified, self.max_notify)
+            self.remove_stock(acc, code)
             return
 
         self.notified.append(code)
