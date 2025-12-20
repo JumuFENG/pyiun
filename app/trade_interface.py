@@ -40,16 +40,10 @@ class TradeInterface:
 
         url = guang.join_url(cls.tserver, 'status')
         try:
-            response = requests.get(url)
-            response.raise_for_status()
-            tstatus = response.json()
+            tstatus = guang.get_request_json(url)
             logger.info(f'trade server status: {tstatus}')
-            if response.status_code != 200:
-                return False
             url = guang.join_url(cls.tserver, 'istradingdate')
-            response = requests.get(url)
-            response.raise_for_status()
-            tstatus = response.json()
+            tstatus = guang.get_request_json(url)
             return tstatus["isTradeDay"]
         except Exception as e:
             logger.error(e)
@@ -59,9 +53,7 @@ class TradeInterface:
     @lru_cache(maxsize=1)
     def iun_str(cls):
         url = guang.join_url(cls.tserver, 'iunstrs')
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
+        return guang.get_request_json(url)
 
     @classmethod
     @lru_cache(maxsize=None)
@@ -72,9 +64,8 @@ class TradeInterface:
         :return: bool
         """
         url = guang.join_url(cls.tserver, f'rzrq?code={code}')
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.text == 'true'
+        text = guang.get_request(url)
+        return text == 'true'
 
     @classmethod
     def get_account_latest_stocks(cls, account):
@@ -84,11 +75,7 @@ class TradeInterface:
         :return: 股票列表
         """
         url = guang.join_url(cls.tserver, f'stocks?account={account}')
-        response = requests.get(url)
-        if response.status_code != 200:
-            logger.error(f'Error fetching latest stocks for {account}: {response.status_code} {response.text}')
-            return []
-        robj = response.json()
+        robj = guang.get_request_json(url)
         if 'account' in robj and robj['account'] == account:
             return robj['stocks']
         return []

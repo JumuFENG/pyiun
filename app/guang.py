@@ -2,6 +2,7 @@ import requests
 import time
 import hashlib
 import os
+from functools import lru_cache
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, ROUND_CEILING
 from datetime import datetime
 from types import SimpleNamespace
@@ -13,8 +14,7 @@ class guang:
 
     @staticmethod
     def time_stamp():
-        curTime = datetime.now()
-        return int(time.mktime(curTime.timetuple()) * 1000 + curTime.microsecond)
+        return int(time.time()*1000)
 
     @staticmethod
     def calc_buy_count(amount, price):
@@ -128,11 +128,22 @@ class guang:
         message['strategies'] = cls.generate_strategy_json(match_data, subscription)
         return message
 
-    @staticmethod
-    def get_request(url, headers=None, params=None, proxies=None):
-        rsp = requests.get(url, headers=headers, params=params, proxies=proxies)
+    @classmethod
+    @lru_cache(maxsize=1)
+    def session(cls) -> requests.Session:
+        return requests.Session()
+
+    @classmethod
+    def get_request(cls, url, headers=None, params=None, proxies=None):
+        rsp = cls.session().get(url, headers=headers, params=params, proxies=proxies)
         rsp.raise_for_status()
         return rsp.content.decode('utf-8')
+
+    @classmethod
+    def get_request_json(cls, url, headers=None, params=None, proxies=None):
+        rsp = cls.session().get(url, headers=headers, params=params, proxies=proxies)
+        rsp.raise_for_status()
+        return rsp.json()
 
     @staticmethod
     def em_headers(**kwargs):
@@ -147,9 +158,9 @@ class guang:
         }
         return headers
 
-    @staticmethod
-    def post_data(url, data=None, headers=None, proxies=None):
-        rsp = requests.post(url, data=data, headers=headers, proxies=proxies)
+    @classmethod
+    def post_data(cls, url, data=None, headers=None, proxies=None):
+        rsp = cls.session().post(url, data=data, headers=headers, proxies=proxies)
         rsp.raise_for_status()
         return rsp.content.decode('utf-8')
 

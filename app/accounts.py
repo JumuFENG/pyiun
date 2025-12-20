@@ -17,11 +17,7 @@ class Account(object):
 
     def load_watchings(self) -> None:
         surl = f"{accld.dserver}stock?act=watchings&acc={self.keyword}"
-        sresponse = requests.get(surl, headers=accld.headers)
-        if sresponse.status_code != 200:
-            logger.error('Error:', sresponse.status_code, sresponse.text)
-            return None
-        stocks = sresponse.json()
+        stocks = guang.get_request_json(surl, headers=accld.headers)
         for c, v in stocks.items():
             if c in iunCloud.get_suspend_stocks():
                 logger.info('%s is suspended', c)
@@ -69,7 +65,7 @@ class Account(object):
     def verify_strategies(self):
         today = guang.today_date('-')
         stocks = iunCloud.get_account_latest_stocks(self.keyword)
-        holding = [s['code'] for s in stocks if s['holdCount'] > 0]
+        holding = [s['code'] for s in stocks if s['holdCount'] > 0 and 'strategies' in s]
         if holding:
             logger.info('%s trading remarks %s', self.keyword, self.trading_remarks)
             hquotes = quotes(holding)
@@ -77,8 +73,11 @@ class Account(object):
                 klPad.cache(c, quotes=hquotes[c])
 
         for stock in stocks:
-            if 'strategies' not in stock or 'strategies' not in stock['strategies'] or not stock['strategies']['strategies']:
+            if 'strategies' not in stock:
                 logger.info('%s %s has no strategy %s', self.keyword, stock['code'], stock)
+                continue
+            if stock['holdCount'] == 0 and ('strategies' not in stock['strategies'] or not stock['strategies']['strategies']):
+                logger.info('%s %s holdCount = 0 %s', self.keyword, stock['code'], stock)
                 continue
             code = stock['code']
             buydetails = stock['strategies'].get('buydetail', [])
@@ -139,9 +138,14 @@ class Account(object):
                         smeta = self.get_strategy_meta(code, sobj['key'])
                         if not smeta:
                             continue
-                        logger.info('set guardPrice for %s with meta %s', code, smeta)
                         if 'guardPrice' in smeta:
-                            sobj['guardPrice'] = smeta['guardPrice']
+                            if 'lost' in smeta:
+                                sobj['guardPrice'] = round((sum([ b['price']*b['count'] for b in buydetails]) + smeta['lost']) / sum([b['count'] for b in buydetails]), 2)
+                                if 'lost' in sobj:
+                                    del sobj['lost']
+                                logger.info('set guardPrice for %s with meta %s', code, smeta)
+                            else:
+                                sobj['guardPrice'] = smeta['guardPrice']
                         elif 'guardPrice' in sobj:
                             del sobj['guardPrice']
                         continue
@@ -383,12 +387,7 @@ class accld:
     @classmethod
     def load_accounts(self):
         url = f"{self.dserver}userbind?onlystock=1"
-        response = requests.get(url, headers=self.headers)
-        if response.status_code != 200:
-            logger.error('Error:', response.status_code, response.text)
-            return None
-
-        accs = response.json()
+        accs = guang.get_request_json(url, self.headers)
         accs = [{'name': 'normal', 'email': '', 'realcash': 1}] + [x for x in accs if x['name'] == 'collat' or x['realcash'] == 0]
         for acc in accs:
             account = Account(acc['name'])
@@ -494,6 +493,9 @@ class accld:
         :param tacc str: 交易账户(买入时设置), 不设置则与持仓账户相同acc
         :return: None
         '''
+        if code in iunCloud.get_suspend_stocks():
+            logger.info('%s is suspended', code)
+            return
         buydetails = accld.get_buy_details(acc, code)
         tacc = acc if tacc is None else tacc
         sobj = accld.get_stock_strategy_group(acc, code)
