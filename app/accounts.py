@@ -55,6 +55,7 @@ class Account(object):
             self.stocks[code]['strategies'] = strategy
 
     def get_strategy_meta(self, code, skey):
+        code = code[-6:]
         try:
             for s in self.stocks[code]['strategies']['strategies'].values():
                 if s['key'] == skey:
@@ -157,6 +158,18 @@ class Account(object):
             return False
         return self.verify_zt_top_reached(stock)
 
+    def create_strategy_keep_recycles(self, code, smeta, origin_strategies):
+        strategies = guang.generate_strategy_json({'code': code, 'strategies': smeta}, {'amount': origin_strategies.get('amount', 10000)})
+        strategies['buydetail'] = origin_strategies.get('buydetail', [])
+        strategies['buydetail_full'] = origin_strategies.get('buydetail_full', [])
+        ikey = len(smeta)
+        for s in self.recycle_strs:
+            sobj = self.get_strategy_meta(code, s)
+            if sobj:
+                strategies['strategies'][ikey] = sobj
+                ikey += 1
+        return strategies
+
     def verify_zt_top_reached(self, stock):
         '''
         如果当日涨停或接近目标价，调整卖出策略
@@ -195,9 +208,7 @@ class Account(object):
             }
 
         if smeta:
-            strategies = guang.generate_strategy_json({'code': code, 'strategies': smeta}, {'amount': stock['strategies'].get('amount', 10000)})
-            strategies['buydetail'] = stock['strategies'].get('buydetail', [])
-            strategies['buydetail_full'] = stock['strategies'].get('buydetail_full', [])
+            strategies = self.create_strategy_keep_recycles(code, smeta, stock['strategies'])
             self.save_stock_strategy(code, strategies)
             return True
 
@@ -220,15 +231,7 @@ class Account(object):
             'StrategySellELS':{'enabled': True, 'topprice': round(top, 2), 'guardPrice': round(guard, 2)},
             'StrategySellBE':{'enabled': True}
         }
-        strategies = guang.generate_strategy_json({'code': code, 'strategies': smeta}, {'amount': stock['strategies'].get('amount', 10000)})
-        strategies['buydetail'] = stock['strategies'].get('buydetail', [])
-        strategies['buydetail_full'] = stock['strategies'].get('buydetail_full', [])
-        ikey = 2
-        for s in self.recycle_strs:
-            sobj = self.get_strategy_meta(stock['code'], s)
-            if sobj:
-                strategies['strategies'][ikey] = sobj
-                ikey += 1
+        strategies = self.create_strategy_keep_recycles(code, smeta, stock['strategies'])
         self.save_stock_strategy(code, strategies)
 
     def verify_hrszt0_strategies(self, stock):
@@ -254,9 +257,7 @@ class Account(object):
             'StrategySellELS':{'enabled': True, 'topprice': round(top, 2)},
             'StrategySellBE':{'enabled': True, 'sell_conds': 1 if sqt['price'] == sqt['high'] else 8}
         }
-        strategies = guang.generate_strategy_json({'code': code, 'strategies': smeta}, {'amount': stock['strategies'].get('amount', 10000)})
-        strategies['buydetail'] = stock['strategies'].get('buydetail', [])
-        strategies['buydetail_full'] = stock['strategies'].get('buydetail_full', [])
+        strategies = self.create_strategy_keep_recycles(code, smeta, stock['strategies'])
         self.save_stock_strategy(code, strategies)
 
     def verify_hotstks_open_strategies(self, stock):
@@ -290,9 +291,7 @@ class Account(object):
             }
             if earn:
                 smeta['StrategySellBE'] = {'enabled': True, 'sell_conds': 4}
-        strategies = guang.generate_strategy_json({'code': code, 'strategies': smeta}, {'amount': stock['strategies'].get('amount', 10000)})
-        strategies['buydetail'] = stock['strategies'].get('buydetail', [])
-        strategies['buydetail_full'] = stock['strategies'].get('buydetail_full', [])
+        strategies = self.create_strategy_keep_recycles(code, smeta, stock['strategies'])
         self.save_stock_strategy(code, strategies)
 
     def verify_recycle_strategies(self, stock):
@@ -388,7 +387,10 @@ class accld:
     def load_accounts(self):
         url = f"{self.dserver}userbind?onlystock=1"
         accs = guang.get_request_json(url, self.headers)
-        accs = [{'name': 'normal', 'email': '', 'realcash': 1}] + [x for x in accs if x['name'] == 'collat' or x['realcash'] == 0]
+        try:
+            accs = [{'name': 'normal', 'email': '', 'realcash': 1}] + [x for x in accs if x['name'] == 'collat' or x['realcash'] == 0]
+        except Exception as e:
+            accs = [{**x, 'name': x['username'].split('.')[1]} for x in accs]
         for acc in accs:
             account = Account(acc['name'])
             account.load_watchings()

@@ -290,8 +290,19 @@ class klPad:
     @classmethod
     def load_dsvr_klines(self, stocks, kltype=101, length=1000, fq=1):
         klines = self.dsvr_source().klines(stocks, kltype, length, fq)
+        chgklt = {}
         for c, k in klines.items():
-            self.cache(c, k, kltype=kltype)
+            chgklt[c] = self.cache(c, k, kltype=kltype)
+        return chgklt
+
+    @classmethod
+    def load_dsvr_quotes(self, stocks):
+        quotes = self.dsvr_source().quotes(stocks)
+        codes = []
+        for c, q in quotes.items():
+            self.cache(c, quotes=q)
+            codes.append(c)
+        return codes
 
     @classmethod
     def resize_cached_klines(self, code, n):
@@ -429,7 +440,9 @@ class DsvrKSource(requestbase):
 
     @property
     def qtapi(self):
-        pass
+        # TODO: migration dserver is set.
+        self.dserver = self.dserver.replace('/5000/', ':9111/')
+        return self.dserver + 'stock/quotes?code=%s'
 
     @property
     def qt5api(self):
@@ -437,49 +450,96 @@ class DsvrKSource(requestbase):
 
     @property
     def tlineapi(self):
-        pass
+        # TODO: migration dserver is set.
+        self.dserver = self.dserver.replace('/5000/', ':9111/')
+        return self.dserver + 'stock/tlines?code=%s'
 
     @property
     def mklineapi(self):
-        return self.dserver + 'api/stockhist?code=%s&kltype=%s&fqt=%s&len=%s'
+        # TODO: migration dserver is set.
+        self.dserver = self.dserver.replace('/5000/', ':9111/')
+        return self.dserver + 'stock/klines?code=%s&kltype=%s&fqt=%s&length=%s'
 
     @property
     def dklineapi(self):
-        return self.dserver + 'api/stockhist?code=%s&kltype=%s&fqt=%s&len=%s'
+        return self.mklineapi
 
     @property
     def fklineapi(self):
-        return self.dserver + 'api/stockhist?code=%s&kltype=%s&fqt=%s&start=0'
+        return self.mklineapi
 
     def get_quote_url(self, stocks):
-        pass
+        return self.qtapi % ','.join(stocks), self._get_headers()
+
+    def format_quote_response(self, rep_data):
+        result = {}
+        for codes, d in rep_data:
+            data = json.loads(d)
+            if not data:
+                continue
+            for stock in data:
+                code = stock if stock in codes else stock[-6:] if stock[-6:] in codes else stock
+                result[code] = data[stock]
+        return result
 
     def get_tline_url(self, stock):
-        pass
+        return self.tlineapi % ','.join(stock), self._get_headers()
+
+    def format_tline_response(self, rep_data):
+        result = {}
+        for codes, d in rep_data:
+            data = json.loads(d)
+            if not data:
+                continue
+            for stock in data:
+                code = stock if stock in codes else stock[-6:] if stock[-6:] in codes else stock
+                result[code] = data[stock]
+        return result
+
+    def tlines(self, stocks):
+        stocks = self._stock_groups(stocks)
+        return self._fetch_concurrently(stocks, self.get_tline_url, self.format_tline_response)
 
     def get_mkline_url(self, stock, kltype='1', length=320, fq=1):
         kltype = self.to_int_kltype(kltype)
-        return self.mklineapi % (stock.upper(), kltype, fq, length), self._get_headers()
+        return self.mklineapi % (','.join(stock), kltype, fq, length), self._get_headers()
 
     def get_dkline_url(self, stock, kltype='101', length=320, fq=1):
         return self.get_mkline_url(stock, kltype, length, fq)
 
     def get_fkline_url(self, stock, kltype='101', fq=0):
         kltype = self.to_int_kltype(kltype)
-        return self.fklineapi % (stock.upper(), kltype, fq), self._get_headers()
+        return self.fklineapi % (stock, kltype, fq), self._get_headers()
 
     def format_kline_response(self, rep_data, **kwargs):
         result = {}
-        for c, d in rep_data:
-            d = json.loads(d)
-            if not d:
+        for codes, d in rep_data:
+            data = json.loads(d)
+            if not data:
                 continue
-            karr = []
-            for x in d:
-                dx = [x[1]] + [float(_x) for _x in x[2:]]
-                dx[6] /= 100
-                dx[7] = int(dx[7]*100)
-                dx[8] *= 10000
-                karr.append(dx)
-            result[c] = self.format_array_list(karr, ['time', 'close', 'high', 'low', 'open', 'change_px', 'change', 'volume', 'amount'])
+            for stock in data:
+                code = stock if stock in codes else stock[-6:] if stock[-6:] in codes else stock
+                cols = ['time', 'open', 'close', 'high', 'low', 'volume', 'amount', 'change', 'change_px', 'amplitude', 'turnover']
+                if len(data[stock][0]) < 11:
+                    cols = cols[:len(data[stock][0])]
+                karr = []
+                for item in data[stock]:
+                    karr.append(item[:len(cols)])
+                result[code] = self.format_array_list(karr, cols)
         return result
+
+    def mklines(self, stocks, kltype, length=320, fq=1, withqt=False):
+        if not self.mklineapi:
+            return
+        kltype = self.to_int_kltype(kltype)
+        stocks = self._stock_groups(stocks)
+        return self._fetch_concurrently(stocks, self.get_mkline_url, self.format_kline_response, url_kwargs={'kltype': kltype, 'length': length, 'fq': fq}, fmt_kwargs={'is_minute': True, 'withqt': False})
+
+    def dklines(self, stocks, kltype=101, length=320, fq=1, withqt=False):
+        return self.mklines(stocks, kltype, length, fq, withqt)
+
+    def fklines(self, stocks, kltype=101, fq=0):
+        return self.mklines(stocks, kltype, length=0, fq=fq, withqt=False)
+
+    def klines(self, stocks, kltype = 1, length=320, fq=1):
+        return self.mklines(stocks, kltype, length, fq, withqt=False)

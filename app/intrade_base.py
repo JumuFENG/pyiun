@@ -794,11 +794,16 @@ class Stock_KlineDay_Watcher(Watcher_Once, Stock_Rt_Watcher):
 
     async def execute_task(self):
         codes = [c for c in self.codes if self.codes[c] > 0]
-        klines = asrt.klines(codes, kltype=101, length=32)
-        chgklt = {}
-        for c in klines:
-            chgklt[c] = klPad.cache(c, klines[c], kltype=101)
-        await self.notify_change(chgklt)
+        try:
+            chgklt = klPad.load_dsvr_klines(codes, kltype=101, length=32)
+        except Exception as e:
+            logger.error(f"Error get daily kline data from dsvr: {e}")
+            klines = asrt.klines(codes, kltype=101, length=32)
+            chgklt = {}
+            for c in klines:
+                chgklt[c] = klPad.cache(c, klines[c], kltype=101)
+        finally:
+            await self.notify_change(chgklt)
 
 
 class KlineJobProcess(JobProcess):
