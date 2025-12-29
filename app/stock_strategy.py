@@ -351,7 +351,7 @@ class StrategySellELShort(StockStrategy):
             if smeta['tmpmaxb1count'] < 1e6:
                 return
             # 涨停之后 打开或者封单减少到当日最大封单量的1/10 卖出.
-            if quotes['ask1'] > 0 or quotes['bid1_volume'] < smeta['tmpmaxb1count'] * 0.1:
+            if quotes['ask1'] > 0 or quotes['bid1_volume'] < min(smeta['tmpmaxb1count'] * 0.1, 1e7):
                 count = FnPs.get_sell_count_matched(buydetails, smeta['cutselltype'], quotes['price'])
                 if count > 0:
                     if 'tmpmaxb1count' in smeta:

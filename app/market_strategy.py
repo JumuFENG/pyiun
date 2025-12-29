@@ -42,12 +42,12 @@ class MarketStrategy(BaseStrategy):
 class GlobalStartup(BaseStrategy):
     def __init__(self):
         self.watcher = Watcher_Once('9:15', '15:00')
-        self.twatcher = Watcher_Once('9:35')
+        self.twatcher = Watcher_Once('9:15', '9:26')
         self.twatcher.execute_task = self.openauction
 
     async def start_strategy_tasks(self):
         await super().start_strategy_tasks()
-        # await self.twatcher.start_strategy_tasks()
+        await self.twatcher.start_strategy_tasks()
 
     def stocks_to_cache(self):
         stocks = accld.all_stocks_cached()
@@ -55,7 +55,6 @@ class GlobalStartup(BaseStrategy):
         stocks += list(hrk.keys())
         hstks = iunCloud.get_hotstocks()
         stocks += [hs[0][-6:] for hs in hstks]
-        # stocks = ['510050', '510300', '510500', '510880', '510900', '510050', '161129', '162411']
         return list(set(stocks))
 
     async def on_watcher(self, params):
@@ -68,9 +67,6 @@ class GlobalStartup(BaseStrategy):
             return
 
         logger.info('stock len %d', len(stocks))
-        # t = time.time()
-        # q = tdx.quotes(stocks)
-        # logger.info('get quotes used time %f', time.time() - t)
         asrt.set_default_sources('mklines', 'mklineapi', ('tencent', 'ths', 'sina'), True)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
         for klt in [1, 15]:
@@ -85,19 +81,10 @@ class GlobalStartup(BaseStrategy):
                 f.result()
             logger.info('cache used time %f', time.time() - t1)
 
-        tests = []
-        # tests = []
-        for c in tests:
-            logger.info("GlobalStartup init klines for %s %s", c, klPad.get_klines(c, 1))
-            logger.info("GlobalStartup init klines for %s %s", c, klPad.get_klines(c, 30))
-
         for c in stocks:
             klPad.calc_indicators(c, 1)
             klPad.calc_indicators(c, 15)
             klPad.resize_cached_klines(c, 20)
-        for c in tests:
-            logger.info("GlobalStartup init klines for %s %s", c, klPad.get_klines(c, 1))
-            logger.info("GlobalStartup init klines for %s %s", c, klPad.get_klines(c, 30))
 
         logger.info("GlobalStartup init klines for %d", len(klines))
 
@@ -112,20 +99,8 @@ class GlobalStartup(BaseStrategy):
         iunCloud.get_financial_cheating()
 
     async def openauction(self):
-        stocks = iunCloud.get_hotstocks()
-        logger.info('GlobalStartup openauction: %s', stocks)
-        stocks = [hs[0][-6:] for hs in stocks[:3]]
-        sources = ['qq', 'cls', 'tgb']
-        # ['qq', 'tdx', 'sina', 'em', 'cls', 'tgb', 'ths', 'xueqiu', 'sohu']
-        for source in sources:
-            src = asrt.rtsource(source)
-            quotes = src.quotes(stocks)
-            logger.info('Quotes from %s: %s', source, quotes)
-        sources = ['qq', 'tdx', 'sina', 'em', 'cls', 'tgb', 'ths', 'xueqiu', 'sohu']
-        for source in sources:
-            src = asrt.rtsource(source)
-            quotes = src.quotes5(stocks)
-            logger.info('Quotes5 from %s: %s', source, quotes)
+        iunCloud.get_hotstocks()
+        iunCloud.get_hotstocks(2)
 
 
 class StrategyI_AuctionUp(BaseStrategy):
@@ -513,7 +488,7 @@ class StrategyI_Zt1WbOpen(BaseStrategy):
     on_intrade_matched = None
 
     def __init__(self):
-        self.prepare_watcher = Watcher_Once('9:22', '9:30')
+        self.prepare_watcher = Watcher_Once('9:22:05', '9:30')
         self.prepare_watcher.execute_task = self.prepare
         self.watcher = Watcher_Once('9:24:56')
         self.watcher.execute_task = self.on_watcher
@@ -703,8 +678,7 @@ class StrategyI_HotStocksOpen(MarketStrategy):
 
     async def prepare(self):
         self.candidates = {}
-        surl = guang.join_url(iunCloud.dserver, f'stock?act=hotstocks&days=2')
-        rc = json.loads(guang.get_request(surl))
+        rc = iunCloud.get_hotstocks(2)
         step = max([x[3] for x in rc])
         top_zt_stocks = []
         while step > 0:
