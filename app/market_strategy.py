@@ -1,21 +1,47 @@
-import asyncio, time, json
+import time, json
 import concurrent.futures
 import stockrt as asrt
 from functools import cached_property
 from app.lofig import logger
 from app.guang import guang
-from app.intrade_base import BaseStrategy, iunCloud, Watcher_Once
+from app.intrade_base import BaseStrategy, Watcher_Once, WatcherFactory as wfac
 from app.klpad import klPad
 from app.accounts import accld
+from app.iuncld import iunCloud
+from app.trade_interface import TradeInterface
+from app.stock_strategy import StockStrategyFactory as sfac
+
+
+class MarketStrategyFactory:
+    @classmethod
+    async def start_all(cls):
+        g = GlobalStartup()
+        await g.start_strategy_tasks()
+        mstr_classes = [
+            StrategyI_AuctionUp, StrategyI_Zt1Bk, StrategyI_EndFundFlow, StrategyI_DeepBigBuy,
+            StrategyI_3Bull_Breakup, StrategyI_Zt1WbOpen, StrategyI_HotrankOpen, StrategyI_HotStocksOpen,
+            StrategyI_DtStocksUp, StrategyI_HotstocksRetryZt0]
+        for s in mstr_classes:
+            if s.key not in TradeInterface.iun_str():
+                continue
+            await s().start_strategy_tasks()
 
 
 class MarketStrategy(BaseStrategy):
+    async def on_intrade_matched(self, ikey, match_data):
+        subscribe_detail = iunCloud.iun_str_conf(ikey)
+        if subscribe_detail:
+            msg = guang.create_buy_message(match_data, subscribe_detail)
+            if msg:
+                TradeInterface.submit_trade(msg)
+                logger.info(f'send {match_data}, {subscribe_detail}, {ikey}')
+
     def add_buy_ztboard(self, acc, code, strategy, mx_notify=None, hurry=False):
         if not isinstance(strategy, dict):
             return None
 
         try:
-            osg = accld.get_stock_strategy_group(acc, code)
+            osg = sfac.get_stock_strategy_group(acc, code)
             mxkeyid = 0
             exists_keys = []
             for k, v in osg['strategies'].items():
@@ -32,7 +58,7 @@ class MarketStrategy(BaseStrategy):
                 logger.error('error when add_buy_ztboard %s %s %s', acc, code, e)
             accld.cache_stock_data(acc, code, {'strategies': strategy})
         finally:
-            s = iunCloud.strFac.stock_strategy('StrategyBuyZTBoard', self.key)
+            s = sfac.get_strategy('StrategyBuyZTBoard', self.key)
             s.add_stock(acc, code)
             s.buy_hurry = hurry
             if mx_notify:
@@ -103,18 +129,17 @@ class GlobalStartup(BaseStrategy):
         iunCloud.get_hotstocks(2)
 
 
-class StrategyI_AuctionUp(BaseStrategy):
+class StrategyI_AuctionUp(MarketStrategy):
     ''' 竞价跌停,竞价结束时打开
     '''
     key = 'istrategy_auctionup'
     name = '竞价跌停打开'
     desc = '竞价跌停,竞价结束时打开跌停'
-    on_intrade_matched = None
     matched = []
     auction_selector = None
 
     def __init__(self):
-        self.watcher = iunCloud.get_watcher('aucsnaps')
+        self.watcher = wfac.get_watcher('aucsnaps')
 
     async def start_strategy_tasks(self):
         iuncfg = iunCloud.iun_str_conf(self.key)
@@ -177,13 +202,12 @@ class StrategyI_AuctionUp(BaseStrategy):
             if self.check_buy_match(auctions) or self.check_buy_vol_more_match(auctions):
                 logger.info(f'{code} buy match! {auctions["lclose"] if "lclose" in auctions else "0"}')
                 self.matched.append(code)
-                if callable(self.on_intrade_matched) and len(self.matched) < 5:
-                    price = float(auctions['quotes'][-1][1]) * (100 + uppercent) / 100
-                    if auctions['quotes'][-1][1] == auctions['bottomprice']:
-                        price = float(auctions["lclose"]) * 0.97
-                    aucup_match_data = {'code': code, 'price': price}
-                    aucup_match_data['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2), 'guardPrice': round(price * 0.92, 2)}, 'StrategySellBE': {}}
-                    await self.on_intrade_matched(self.key, aucup_match_data, guang.create_buy_message)
+                price = float(auctions['quotes'][-1][1]) * (100 + uppercent) / 100
+                if auctions['quotes'][-1][1] == auctions['bottomprice']:
+                    price = float(auctions["lclose"]) * 0.97
+                aucup_match_data = {'code': code, 'price': price}
+                aucup_match_data['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2), 'guardPrice': round(price * 0.92, 2)}, 'StrategySellBE': {}}
+                await self.on_intrade_matched(self.key, aucup_match_data)
         self.watcher.matched = self.matched
 
 
@@ -193,11 +217,10 @@ class StrategyI_Zt1Bk(MarketStrategy):
     key = 'istrategy_zt1bk'
     name = '首板板块'
     desc = '板块5日内首次满足涨幅>2%, 涨幅8%以上家数>=5且主力净流入时, 排队/打板'
-    on_intrade_matched = None
 
     def __init__(self):
-        self.watcher = iunCloud.get_watcher('stkzdf')
-        self.bkwatcher = iunCloud.get_watcher('bkchanges')
+        self.watcher = wfac.get_watcher('stkzdf')
+        self.bkwatcher = wfac.get_watcher('bkchanges')
         self.bklistener = BaseStrategy()
         self.bkwatcher.add_listener(self.bklistener)
         self.bklistener.on_watcher = self.on_bk_changes
@@ -271,8 +294,6 @@ class StrategyI_Zt1Bk(MarketStrategy):
             s = c[-6:]
             if s in self.stock_notified: continue
             if s not in self.candidates_bkstks: continue
-            if not callable(self.on_intrade_matched):
-                continue
             zt_price = guang.zt_priceby(lc, zdf=guang.zdf_from_code(c))
             mdata = {'code': s, 'price': zt_price, 'buy': p >= zt_price}
             mdata['strategies'] = {}
@@ -285,7 +306,7 @@ class StrategyI_Zt1Bk(MarketStrategy):
                 strategy = guang.generate_strategy_json({'code': s, 'price': zt_price, 'strategies': mdata['strategies']}, iuncfg)
                 self.add_buy_ztboard(account, s, strategy)
             else:
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
+                await self.on_intrade_matched(self.key, mdata)
             accld.add_trading_remarks(account, s, self.key)
             self.stock_notified.append(s)
 
@@ -293,15 +314,14 @@ class StrategyI_Zt1Bk(MarketStrategy):
        logger.info(f'zt1bk stopped! {self.stock_notified}')
 
 
-class StrategyI_EndFundFlow(BaseStrategy):
+class StrategyI_EndFundFlow(MarketStrategy):
     ''' 尾盘主力净流入
     '''
     key = 'istrategy_endfflow'
     name = '尾盘净流入'
     desc = '尾盘主力资金净流入, 流入额>1000w, 流入占比>10%, 三日连续净流入, 三日累计涨幅<10%, 流通市值<1000亿'
-    on_intrade_matched = None
     def __init__(self):
-        self.watcher = iunCloud.get_watcher('end_fundflow')
+        self.watcher = wfac.get_watcher('end_fundflow')
 
     async def start_strategy_tasks(self):
         iuncfg = iunCloud.iun_str_conf(self.key)
@@ -350,22 +370,20 @@ class StrategyI_EndFundFlow(BaseStrategy):
                 continue
 
             sstocks.append(code)
-            if callable(self.on_intrade_matched):
-                mdata = {'code': code, 'price': quotes['price']*1.02}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(quotes['price'] * 1.07, 2), 'guardPrice': round(quotes['price'] * 0.95, 2) }}
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
+            mdata = {'code': code, 'price': quotes['price']*1.02}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(quotes['price'] * 1.07, 2), 'guardPrice': round(quotes['price'] * 0.95, 2) }}
+            await self.on_intrade_matched(self.key, mdata)
         logger.info('EndFundFlow select %d stocks: %s', len(sstocks), sstocks)
 
 
-class StrategyI_DeepBigBuy(BaseStrategy):
+class StrategyI_DeepBigBuy(MarketStrategy):
     ''' 热门股深水大单买入
     '''
     key = 'istrategy_bigbuy'
     name = '深水大单买入'
     desc = '近期热门股深水大单买入'
-    on_intrade_matched = None
     def __init__(self):
-        self.watcher = iunCloud.get_watcher('stkchanges')
+        self.watcher = wfac.get_watcher('stkchanges')
         self.hotchanges = None
         self.stock_notified = []
 
@@ -404,22 +422,20 @@ class StrategyI_DeepBigBuy(BaseStrategy):
             if buy_count < 1.2 * sell_count:
                 continue
 
-            if callable(self.on_intrade_matched):
-                self.stock_notified.append(code)
-                mdata = {'code': code, 'price': cinfo[1]}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(float(cinfo[1]) * 1.05, 2), 'guardPrice': round(float(cinfo[1]) * 0.95, 2) }}
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
+            self.stock_notified.append(code)
+            mdata = {'code': code, 'price': cinfo[1]}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(float(cinfo[1]) * 1.05, 2), 'guardPrice': round(float(cinfo[1]) * 0.95, 2) }}
+            await self.on_intrade_matched(self.key, mdata)
 
 
-class StrategyI_3Bull_Breakup(BaseStrategy):
+class StrategyI_3Bull_Breakup(MarketStrategy):
     ''' 三阳开泰
     '''
     key = 'istrategy_3brk'
     name = '三阳开泰'
     desc = '连续3根阳线价升量涨 以突破此3根阳线的最高价为买入点 以第一根阳线到买入日期之间的最低价为止损价 止盈设置5%'
-    on_intrade_matched = None
     def __init__(self):
-        self.watcher = iunCloud.get_watcher('kline1')
+        self.watcher = wfac.get_watcher('kline1')
         self.prepare_watcher = Watcher_Once('9:30', '14:57')
         self.prepare_watcher.execute_task = self.prepare
         self.stock_notified = []
@@ -472,20 +488,18 @@ class StrategyI_3Bull_Breakup(BaseStrategy):
             if price == 0:
                 logger.error('StrategyI_3Bull_Breakup no zt price for %s, %s', code, klines)
                 continue
-            if callable(self.on_intrade_matched):
-                mdata = {'code': code, 'price': price}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2), 'guardPrice': self.candidates[code]['low'] }}
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
-                self.stock_notified.append(code)
+            mdata = {'code': code, 'price': price}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2), 'guardPrice': self.candidates[code]['low'] }}
+            await self.on_intrade_matched(self.key, mdata)
+            self.stock_notified.append(code)
 
 
-class StrategyI_Zt1WbOpen(BaseStrategy):
+class StrategyI_Zt1WbOpen(MarketStrategy):
     ''' 烂板1进2
     '''
     key = 'istrategy_zt1wb'
     name = '首板烂板1进2'
     desc = '首板烂板1进2,超预期开盘,开盘>-3%,以开盘价买入'
-    on_intrade_matched = None
 
     def __init__(self):
         self.prepare_watcher = Watcher_Once('9:22:05', '9:30')
@@ -540,12 +554,11 @@ class StrategyI_Zt1WbOpen(BaseStrategy):
             if (self.pupfix > 1 and ochange < 0) or (self.pupfix == 1 and ochange < -0.03):
                 continue
             price = oprice if self.pupfix == 1 else min(round(oprice * self.pupfix, 2), q['top_price'])
-            if callable(self.on_intrade_matched):
-                mdata = {'code': c, 'price': price}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}}
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
-                self.stock_notified.append(c)
-                accld.add_trading_remarks(self.candidates[c]['account'], c, self.key)
+            mdata = {'code': c, 'price': price}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}}
+            await self.on_intrade_matched(self.key, mdata)
+            self.stock_notified.append(c)
+            accld.add_trading_remarks(self.candidates[c]['account'], c, self.key)
 
     async def on_watcher2(self):
         self.pupfix = 1
@@ -553,13 +566,12 @@ class StrategyI_Zt1WbOpen(BaseStrategy):
         logger.info('%s done, candidates %s notified %s', self.__class__.name, self.candidates.keys(), self.stock_notified)
 
 
-class StrategyI_HotrankOpen(BaseStrategy):
+class StrategyI_HotrankOpen(MarketStrategy):
     ''' 开盘人气排行
     '''
     key = 'istrategy_hotrank0'
     name = '开盘人气排行'
     desc = '不涨停且股价涨跌幅介于[-3, 9] 选人气排行前10中新增粉丝>70%排名最前者'
-    on_intrade_matched = None
     def __init__(self):
         self.prepare_watcher = Watcher_Once('9:22', '9:30')
         self.prepare_watcher.execute_task = self.prepare
@@ -631,11 +643,10 @@ class StrategyI_HotrankOpen(BaseStrategy):
             price = q['price'] * self.pupfix
             price = min(round(price, 2), q['top_price'])
 
-            if callable(self.on_intrade_matched):
-                mdata = {'code': c, 'price': price}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}}
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
-                self.matched = True
+            mdata = {'code': c, 'price': price}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}}
+            await self.on_intrade_matched(self.key, mdata)
+            self.matched = True
 
     async def on_watcher2(self):
         self.pupfix = 1.018
@@ -657,7 +668,6 @@ class StrategyI_HotStocksOpen(MarketStrategy):
     key = 'istrategy_hotstks_open'
     name = '开盘热门领涨股'
     desc = '最近涨停的高标人气股，最近连板高度前10左右，开盘时选这些票中人气排行前5的股票买入，需择时.'
-    on_intrade_matched = None
 
     def __init__(self):
         self.prepare_watcher = Watcher_Once('9:22','9:30')
@@ -767,10 +777,9 @@ class StrategyI_HotStocksOpen(MarketStrategy):
             else:
                 price = q['price'] * 0.95
             price = min(price, round(q['lclose'] * 1.05, 2))
-            if callable(self.on_intrade_matched):
-                mdata = {'code': c, 'price': price}
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
-                logger.info('%s buy %s %s at %s', self.key, c, q['name'], price)
+            mdata = {'code': c, 'price': price}
+            await self.on_intrade_matched(self.key, mdata)
+            logger.info('%s buy %s %s at %s', self.key, c, q['name'], price)
 
         if not env_valid:
             logger.info('%s environment not valid', self.key)
@@ -796,14 +805,13 @@ class StrategyI_HotStocksOpen(MarketStrategy):
             price = q['price'] * self.pupfix
             price = min(round(price, 2), q['top_price'] if 'top_price' in q else guang.zt_priceby(q['lclose'], zdf=guang.zdf_from_code(c)))
 
-            if callable(self.on_intrade_matched):
-                mdata = {'code': c, 'price': price}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}, 'StrategySellBE': {}}
-                iuncfg = iunCloud.iun_str_conf(self.key)
-                account = iunCloud.get_hold_account(c, iuncfg['account'])
-                await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
-                logger.info('%s buy %s %s at %s', self.key, c, q['name'], price)
-                accld.add_trading_remarks(account, c, self.key)
+            mdata = {'code': c, 'price': price}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}, 'StrategySellBE': {}}
+            iuncfg = iunCloud.iun_str_conf(self.key)
+            account = iunCloud.get_hold_account(c, iuncfg['account'])
+            await self.on_intrade_matched(self.key, mdata)
+            logger.info('%s buy %s %s at %s', self.key, c, q['name'], price)
+            accld.add_trading_remarks(account, c, self.key)
 
         self.save_ohstks()
 
@@ -823,13 +831,12 @@ class StrategyI_HotStocksOpen(MarketStrategy):
         guang.post_data(url, data)
 
 
-class StrategyI_DtStocksUp(BaseStrategy):
+class StrategyI_DtStocksUp(MarketStrategy):
     ''' 跌停翘板
     '''
     key = 'istrategy_dtstocks'
     name = '跌停翘板'
     desc = '盘中: 跌停撬板, 优先选封单金额大的,从前高下来换手小, 跌幅大. 早上9:33之后开始监控防止有的票早盘撬板又封死, 下午2:30之后取消。竞价若昨日跌停数>5家,今日竞价无跌停,则选昨日跌停中今日开盘最低的几只.'
-    on_intrade_matched = None
 
     def __init__(self):
         self.prepare_watcher = Watcher_Once('9:24', '14:30')
@@ -893,12 +900,11 @@ class StrategyI_DtStocksUp(BaseStrategy):
 
             price = q['price'] * 1.05
             price = min(round(price, 2), q['lclose'] * 0.95)
-            if callable(self.on_intrade_matched):
-                mdata = {'code': c, 'price': price}
-                mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2), 'guardPrice': round(price * 0.92, 2)}}
-                # await self.on_intrade_matched(self.key, mdata, guang.create_buy_message)
-                logger.info('%s %s buy %s at %.2f', self.__class__.name, self.key, c, price)
-                self.matched.append(c)
+            mdata = {'code': c, 'price': price}
+            mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2), 'guardPrice': round(price * 0.92, 2)}}
+            # await self.on_intrade_matched(self.key, mdata)
+            logger.info('%s %s buy %s at %.2f', self.__class__.name, self.key, c, price)
+            self.matched.append(c)
 
     async def on_watcher1(self):
         # 开盘三分钟
@@ -962,7 +968,7 @@ class StrategyI_DtStocksUp(BaseStrategy):
         iuncfg = iunCloud.iun_str_conf(self.key)
         strategy = guang.generate_strategy_json({'code': code, 'strategies': {'StrategyBuyDTBoard': {}}}, iuncfg)
         acount = iunCloud.get_hold_account(code, iuncfg['account'])
-        iunCloud.strFac.add_stock_strategy(acount, code, strategy)
+        accld.add_stock_strategy(acount, code, strategy)
 
     async def cancel(self):
         logger.info(f'{self.__class__.name} cancel all matched {self.matched}')
@@ -973,14 +979,13 @@ class StrategyI_DtStocksUp(BaseStrategy):
         logger.info(f'{self.__class__.name} disable planned {code}')
         iuncfg = iunCloud.iun_str_conf(self.key)
         acount = iunCloud.get_hold_account(code, iuncfg['account'])
-        iunCloud.strFac.disable_stock_strategy(acount, code, 'StrategyBuyDTBoard')
+        accld.disable_stock_strategy(acount, code, 'StrategyBuyDTBoard')
 
 
 class StrategyI_HotstocksRetryZt0(MarketStrategy):
     key = 'istrategy_hsrzt0'
     name = '热门股回调首板'
     desc = '高标/人气股 涨停回调(>3个交易日)之后首板打板买入'
-    on_intrade_matched = None
     def __init__(self):
         self.watcher = Watcher_Once('9:29', '14:57')
 

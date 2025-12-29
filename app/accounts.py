@@ -1,18 +1,16 @@
-import requests
 import json
 from stockrt import get_fullcode, quotes
 from app.lofig import logger
 from app.guang import guang
-from app.intrade_base import iunCloud
-from app.trade_interface import TradeInterface
+from app.iuncld import iunCloud
 from app.klpad import klPad
+from app.stock_strategy import StockStrategyFactory as sfac
 
 
 class Account(object):
     recycle_strs = ['StrategyGE', 'StrategyBSBE']
     def __init__(self, acc):
         self.keyword = acc
-        self.stocks = {}
         self.trading_remarks = {}
 
     def load_watchings(self) -> None:
@@ -27,41 +25,15 @@ class Account(object):
                 logger.error('%s %s has no strategy', self.keyword, c)
                 continue
 
-            self.cache_stock(code, v)
+            sfac.cache_stock_strategy(self.keyword, code, v)
 
             for sobj in v['strategies']['strategies'].values():
                 if not sobj['enabled']:
                     continue
-                s = iunCloud.strFac.stock_strategy(sobj['key'])
+                s = sfac.get_strategy(sobj['key'])
                 if s:
                     s.add_stock(self.keyword, code)
-        logger.info('%s Loaded stocks: %d', self.keyword, len(self.stocks))
-
-    def cache_stock(self, code, data):
-        strategy = data['strategies']
-        strategy['strategies'] = accld.parse_number_in_strategies(strategy['strategies'])
-        if code not in self.stocks:
-            count = data.get('holdCount', 0)
-            price = data.get('holdCost', 0)
-            self.stocks[code] = {
-                'holdCost': price,
-                'holdCount': count,
-                'strategies': strategy,
-                'buydetail': strategy.get('buydetail', []),
-                'buydetail_full': strategy.get('buydetail_full', [])
-            }
-            return
-        else:
-            self.stocks[code]['strategies'] = strategy
-
-    def get_strategy_meta(self, code, skey):
-        code = code[-6:]
-        try:
-            for s in self.stocks[code]['strategies']['strategies'].values():
-                if s['key'] == skey:
-                    return s
-        except KeyError:
-            return None
+        logger.info('%s Loaded stocks: %d', self.keyword, len(stocks))
 
     def verify_strategies(self):
         today = guang.today_date('-')
@@ -129,14 +101,14 @@ class Account(object):
                 dkeys = []
                 for k, sobj in stock['strategies']['strategies'].items():
                     if sobj['key'] == 'StrategyBSBE':
-                        smeta = self.get_strategy_meta(code, sobj['key'])
+                        smeta = sfac.get_strategy_meta(self.keyword, code, sobj['key'])
                         if not smeta:
                             continue
                         logger.info('set guardPrice for %s with meta %s', code, smeta)
                         sobj['guardPrice'] = smeta['guardPrice']
                         continue
                     if sobj['key'] == 'StrategyGE':
-                        smeta = self.get_strategy_meta(code, sobj['key'])
+                        smeta = sfac.get_strategy_meta(self.keyword, code, sobj['key'])
                         if not smeta:
                             continue
                         if 'guardPrice' in smeta:
@@ -164,7 +136,7 @@ class Account(object):
         strategies['buydetail_full'] = origin_strategies.get('buydetail_full', [])
         ikey = len(smeta)
         for s in self.recycle_strs:
-            sobj = self.get_strategy_meta(code, s)
+            sobj = sfac.get_strategy_meta(self.keyword, code, s)
             if sobj:
                 strategies['strategies'][ikey] = sobj
                 ikey += 1
@@ -306,14 +278,14 @@ class Account(object):
                 continue
             remain_strs.append(k)
             if sobj['key'] == 'StrategyGE':
-                smeta = self.get_strategy_meta(stock['code'], sobj['key'])
+                smeta = sfac.get_strategy_meta(self.keyword, stock['code'], sobj['key'])
                 if not smeta:
                     continue
                 if 'guardPrice' in sobj:
                     del sobj['guardPrice']
                 sobj['inCritical'] = False
             if sobj['key'] == 'StrategyBSBE':
-                smeta = self.get_strategy_meta(stock['code'], sobj['key'])
+                smeta = sfac.get_strategy_meta(self.keyword, stock['code'], sobj['key'])
                 if smeta and 'guardPrice' in smeta:
                     sobj['guardPrice'] = smeta['guardPrice']
                     continue
@@ -397,63 +369,10 @@ class accld:
             self.all_accounts[acc['name']] = account
 
     @classmethod
-    def parse_number_in_strategies(self, strdata):
-        for k, v in strdata.items():
-            for i, val in v.items():
-                if isinstance(val, str):
-                    if val.isdigit():
-                        strdata[k][i] = int(val)
-                    else:
-                        try:
-                            strdata[k][i] = float(val)
-                        except:
-                            pass
-            strdata[k] = {i: val for i,val in strdata[k].items() if val is not None}
-        return strdata
-
-    @classmethod
     def cache_stock_data(self, acc, code, data):
         if not acc in self.all_accounts:
             self.all_accounts[acc] = Account(acc)
-        self.all_accounts[acc].cache_stock(code, data)
-
-    @classmethod
-    def get_buy_details(self, acc, code):
-        if not acc in self.all_accounts or not code in self.all_accounts[acc].stocks:
-            return []
-        return self.all_accounts[acc].stocks[code]['buydetail']
-
-    @classmethod
-    def update_buy_details(self, acc, code, buydetails):
-        if acc not in self.all_accounts:
-            return
-        if code not in self.all_accounts[acc].stocks:
-            self.all_accounts[acc].stocks[code] = {}
-        self.all_accounts[acc].stocks[code]['buydetail'] = buydetails
-
-    @classmethod
-    def get_strategy_meta(cls, acc, code, skey):
-        if acc not in cls.all_accounts or code not in cls.all_accounts[acc].stocks:
-            return None
-        return cls.all_accounts[acc].get_strategy_meta(code, skey)
-
-    @classmethod
-    def update_strategy_meta(self, acc, code, skey, dmeta):
-        if acc not in self.all_accounts:
-            return
-        if code not in self.all_accounts[acc].stocks:
-            self.all_accounts[acc].stocks[code] = {'strategies': {'strategies': {'0': dmeta}}}
-            return
-
-        for s in self.all_accounts[acc].stocks[code]['strategies']['strategies'].values():
-            if s['key'] == skey:
-                s.update(dmeta)
-
-    @classmethod
-    def get_stock_strategy_group(cls, acc, code):
-        if acc in cls.all_accounts and code in cls.all_accounts[acc].stocks:
-            return cls.all_accounts[acc].stocks[code]['strategies']
-        return None
+        sfac.cache_stock_strategy(acc, code, data)
 
     @classmethod
     def get_account_holdcount(cls, acc, code):
@@ -468,55 +387,6 @@ class accld:
     @classmethod
     def all_stocks_cached(self):
         return sum([list(acc.stocks.keys()) for acc in self.all_accounts.values()], [])
-
-    @staticmethod
-    def consume_buy_details(buyrecs, count):
-        if len(buyrecs) == 0:
-            return []
-        for i in range(len(buyrecs)):
-            if count <= 0:
-                break
-            if buyrecs[i]['count'] > count:
-                buyrecs[i]['count'] -= count
-                count = 0
-            else:
-                count -= buyrecs[i]['count']
-                buyrecs[i]['count'] = 0
-        return [rec for rec in buyrecs if rec['count'] > 0]
-
-    @classmethod
-    def planned_strategy_trade(self, acc: str, code: str, tradeType: str, price: float, count: int, tacc: str=None) -> None:
-        '''
-        :param acc str: 持仓账户
-        :param code str: 股票代码
-        :param tradeType str: 'B'/'S'
-        :param price float: 价格
-        :param count int: 股数
-        :param tacc str: 交易账户(买入时设置), 不设置则与持仓账户相同acc
-        :return: None
-        '''
-        if code in iunCloud.get_suspend_stocks():
-            logger.info('%s is suspended', code)
-            return
-        buydetails = accld.get_buy_details(acc, code)
-        tacc = acc if tacc is None else tacc
-        sobj = accld.get_stock_strategy_group(acc, code)
-        if tradeType == 'B':
-            if count == 0:
-                if not sobj or 'amount' not in sobj:
-                    logger.error('No stock strategy found for %s %s', acc, code)
-                    return
-                amount = sobj['amount']
-                count = guang.calc_buy_count(amount, price)
-            buydetails.append({'code': code, 'count': count, 'price': price, 'date': guang.today_date('-'), 'type': 'B'})
-        else:
-            buydetails = self.consume_buy_details(buydetails, count)
-        tradeparam = {'account': tacc, 'code': code, 'tradeType': tradeType, 'count': count, 'price': price,}
-        if sobj:
-            tradeparam['strategies'] = {k: v for k,v in sobj.items() if k not in ['buydetail', 'buydetail_full']}
-        TradeInterface.submit_trade(tradeparam)
-        logger.info('Strategy trade: %s %s %s %f %d', tacc, code, tradeType, price, count)
-        accld.update_buy_details(acc, code, buydetails)
 
     @classmethod
     def verify_strategies(self):
@@ -538,3 +408,33 @@ class accld:
             logger.debug('add_trading_remarks Account %s not found', hacc)
             return
         self.all_accounts[hacc].trading_remarks[code] = remark
+
+    @classmethod
+    def add_stock_strategy(cls, acc, code, strategy):
+        if not isinstance(strategy, dict):
+            return None
+
+        accld.cache_stock_data(acc, code, {'strategies': strategy})
+        for sobj in strategy['strategies'].values():
+            if not sobj['enabled']:
+                continue
+            s = sfac.get_strategy(sobj['key'])
+            if s:
+                s.add_stock(acc, code)
+
+    @classmethod
+    def disable_stock_strategy(cls, acc, code, skey):
+        if not skey:
+            return
+
+        smeta = sfac.get_strategy_meta(acc, code, skey)
+        if smeta and smeta['enabled']:
+            smeta['enabled'] = False
+            sfac.update_strategy_meta(acc, code, skey, smeta)
+        else:
+            return
+
+        s = sfac.get_strategy(smeta['key'])
+        if s:
+            s.remove_stock(acc, code)
+        logger.info(f'stock  {acc} {code} {skey} disabled')

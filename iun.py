@@ -6,21 +6,12 @@ from app.guang import guang
 from app.lofig import Config, logger, delayed_tasks
 from app.trade_interface import TradeInterface
 from app.accounts import accld
-from app.klpad import klPad, DsvrKSource
-from app.intrade_base import iunCloud
-from app.strategy_factory import StrategyFactory, GlobalStartup
+from app.klpad import DsvrKSource
+from app.iuncld import iunCloud
+from app.market_strategy import MarketStrategyFactory as mfac
 
 
 class iun:
-    @classmethod
-    async def intrade_matched(self, ikey, match_data, istr_message_creator):
-        subscribe_detail = iunCloud.iun_str_conf(ikey)
-        if subscribe_detail and callable(istr_message_creator):
-            msg = istr_message_creator(match_data, subscribe_detail)
-            if msg:
-                TradeInterface.submit_trade(msg)
-                logger.info(f'send {match_data}, {subscribe_detail}, {ikey}')
-
     @classmethod
     async def main(cls):
         remain_secs = guang.delay_seconds('9:11')
@@ -36,7 +27,6 @@ class iun:
         dconfig = Config.data_service()
         DsvrKSource.dserver = dconfig['server']
         iunCloud.dserver = dconfig['server']
-        iunCloud.strFac = StrategyFactory
         accld.dserver = dconfig['server']
         accld.headers = {
             'Authorization': f'''Basic {base64.b64encode(f"{dconfig['user']}:{Config.simple_decrypt(dconfig['password'])}".encode()).decode()}'''
@@ -48,10 +38,7 @@ class iun:
         asrt.set_array_format(srtcfg.get('array_format', 'df'))
         accld.load_accounts()
 
-        strategies = [GlobalStartup()] + [s for s in StrategyFactory.market_strategies() if s.key in TradeInterface.iun_str()]
-        for task in strategies:
-            task.on_intrade_matched = cls.intrade_matched
-            await task.start_strategy_tasks()
+        await mfac.start_all()
 
         await asyncio.sleep(1)
         if len(delayed_tasks) > 0:

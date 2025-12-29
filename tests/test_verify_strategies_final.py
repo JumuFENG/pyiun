@@ -12,7 +12,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.accounts import Account, accld
-from app.intrade_base import iunCloud
+from app.iuncld import iunCloud
+from app.stock_strategy import StockStrategyFactory as sfac
 
 
 class TestVerifyStrategies(unittest.TestCase):
@@ -134,7 +135,7 @@ class TestVerifyStrategies(unittest.TestCase):
         self.account.save_stock_strategy = Mock()
 
         # 模拟get_strategy_meta方法
-        self.account.get_strategy_meta = Mock(return_value=None)
+        sfac.get_strategy_meta = Mock(return_value=None)
 
         # 执行测试
         self.account.verify_strategies()
@@ -290,7 +291,7 @@ class TestVerifyStrategies(unittest.TestCase):
         self.account.save_stock_strategy = Mock()
 
         # 模拟get_strategy_meta方法
-        self.account.get_strategy_meta = Mock(return_value=None)
+        sfac.get_strategy_meta = Mock(return_value=None)
 
         # 执行测试
         self.account.verify_strategies()
@@ -373,17 +374,17 @@ class TestVerifyStrategies(unittest.TestCase):
         }
 
         # 测试获取存在的策略
-        result = self.account.get_strategy_meta('603879', 'StrategyBSBE')
+        result = sfac.get_strategy_meta(self.account.keyword, '603879', 'StrategyBSBE')
         self.assertIsNotNone(result)
         self.assertEqual(result['key'], 'StrategyBSBE')
         self.assertEqual(result['guardPrice'], 7.79)
 
         # 测试获取不存在的策略
-        result = self.account.get_strategy_meta('603879', 'NonExistentStrategy')
+        result = sfac.get_strategy_meta(self.account.keyword, '603879', 'NonExistentStrategy')
         self.assertIsNone(result)
 
         # 测试获取不存在股票的策略
-        result = self.account.get_strategy_meta('000001', 'StrategyBSBE')
+        result = sfac.get_strategy_meta(self.account.keyword, '000001', 'StrategyBSBE')
         self.assertIsNone(result)
 
     def test_save_stock_strategy_parameter_validation_examples(self):

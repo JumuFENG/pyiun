@@ -1,7 +1,5 @@
 import requests
 import time
-import hashlib
-import os
 from functools import lru_cache
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, ROUND_CEILING
 from datetime import datetime
