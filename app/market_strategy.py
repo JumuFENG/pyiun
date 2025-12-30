@@ -136,7 +136,6 @@ class StrategyI_AuctionUp(MarketStrategy):
     name = '竞价跌停打开'
     desc = '竞价跌停,竞价结束时打开跌停'
     matched = []
-    auction_selector = None
 
     def __init__(self):
         self.watcher = wfac.get_watcher('aucsnaps')
@@ -195,6 +194,8 @@ class StrategyI_AuctionUp(MarketStrategy):
             if code in self.matched:
                 continue
             if not (code.startswith('00') or code.startswith('60')):
+                continue
+            if 'zddays' not in auctions:
                 continue
             zdays, zdist, ddays, ddist = auctions['zddays']
             if zdays > 0 or zdist > 0 or ddays == 0 or ddist >= ddays:
@@ -362,7 +363,7 @@ class StrategyI_EndFundFlow(MarketStrategy):
 
             code = c[-6:]
             mfs = iunCloud.get_stock_fflow(code, allkl['time'].iloc[0], allkl['time'].iloc[-1])
-            if mfs is None or len(mfs) == 0 or mfs[0][1] > 0:
+            if mfs is None or len(mfs) < len(allkl) or mfs[0][1] > 0:
                 # 仅选择连续三日净流入，如果mfs[0]也是净流入说明今天已经是第四天净流入了,排除
                 continue
             min_in = min([m[1] for m in mfs[1:]])
@@ -533,13 +534,13 @@ class StrategyI_Zt1WbOpen(MarketStrategy):
             if code in iunCloud.get_suspend_stocks():
                 logger.info('%s is suspended', code)
                 continue
+            canacc = account
             if account == '':
-                account = 'credit' if iunCloud.is_rzrq(code) else 'normal'
-                self.candidates[code] = {'account': account}
+                canacc = 'credit' if iunCloud.is_rzrq(code) else 'normal'
             elif account == 'credit':
                 if not iunCloud.is_rzrq(code):
                     continue
-            self.candidates[code] = {'account': account}
+            self.candidates[code] = {'account': canacc}
 
     async def on_watcher(self):
         stocks = [c for c in self.candidates if c not in self.stock_notified]

@@ -171,6 +171,8 @@ class iunCloud:
         }
 
         fflow = json.loads(guang.get_request(url, params=params))
+        if isinstance(fflow[0][0], str):
+            return [f for f in fflow if date is None or f[0] >= date and (date1 is None or f[0] <= date1)]
         values = [f[1:] for f in fflow if date is None or f[1] >= date and (date1 is None or f[1] <= date1)]
         return values
 

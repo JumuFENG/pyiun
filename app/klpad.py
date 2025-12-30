@@ -289,6 +289,8 @@ class klPad:
 
     @classmethod
     def load_dsvr_klines(self, stocks, kltype=101, length=1000, fq=1):
+        if not stocks:
+            return {}
         klines = self.dsvr_source().klines(stocks, kltype, length, fq)
         chgklt = {}
         for c, k in klines.items():
@@ -297,6 +299,8 @@ class klPad:
 
     @classmethod
     def load_dsvr_quotes(self, stocks):
+        if not stocks:
+            return []
         quotes = self.dsvr_source().quotes(stocks)
         codes = []
         for c, q in quotes.items():

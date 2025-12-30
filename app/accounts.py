@@ -377,16 +377,14 @@ class accld:
     @classmethod
     def get_account_holdcount(cls, acc, code):
         if acc == '':
-            acc = 'normal' if code in cls.all_accounts['normal'].stocks else 'collat'
+            acc = 'normal' if ('normal', code) in sfac.stocks else 'collat'
         if acc == 'credit':
             acc = 'collat'
-        if code in cls.all_accounts[acc].stocks:
-            return cls.all_accounts[acc].stocks[code].get('holdCount', 0)
-        return 0
+        return sfac.stocks.get((acc, code), {}).get('holdCount', 0)
 
     @classmethod
     def all_stocks_cached(self):
-        return sum([list(acc.stocks.keys()) for acc in self.all_accounts.values()], [])
+        return [code for acc,code in sfac.stocks.keys()]
 
     @classmethod
     def verify_strategies(self):
