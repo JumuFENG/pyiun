@@ -184,25 +184,53 @@ class iunCloud:
                 return []
             return stocks['all']
 
-        clist = Em.qt_clist(
-            fs='m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2',
-            fields='f1,f2,f3,f4,f5,f6,f15,f16,f17,f18,f12,f13,f14',
-            fid='f3', po=1 if minzdf > 0 else 0,
-            qtcb=lambda data: any(abs(d['f3']) < abs(minzdf) for d in data)
-        )
-        return [{
-            'code': asrt.get_fullcode(s['f12']),
-            'name': s['f14'],
-            'close': float(s['f2']),
-            'high': float(s['f15']) if s['f15'] != '-' else 0,
-            'low': float(s['f16']) if s['f16'] != '-' else 0,
-            'open': float(s['f17']) if s['f17'] != '-' else 0,
-            'lclose': float(s['f18']),
-            'change_px': float(s['f4']),
-            'change': float(s['f3']) / 100,
-            'volume': (int(s['f5']) if s['f5'] != '-' else 0) * 100,
-            'amount': float(s['f6']) if s['f6'] != '-' else 0
-        } for s in clist if s['f2'] != '-' and s['f18'] != '-']
+        try:
+            clist = Em.qt_clist(
+                fs='m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2',
+                fields='f1,f2,f3,f4,f5,f6,f15,f16,f17,f18,f12,f13,f14',
+                fid='f3', po=1 if minzdf > 0 else 0,
+                qtcb=lambda data: any(abs(d['f3']) < abs(minzdf) for d in data)
+            )
+            if not clist:
+                raise Exception('No data from Em.qt_clist')
+            result = [{
+                'code': asrt.get_fullcode(s['f12']),
+                'name': s['f14'],
+                'close': float(s['f2']),
+                'high': float(s['f15']) if s['f15'] != '-' else 0,
+                'low': float(s['f16']) if s['f16'] != '-' else 0,
+                'open': float(s['f17']) if s['f17'] != '-' else 0,
+                'lclose': float(s['f18']),
+                'change_px': float(s['f4']),
+                'change': float(s['f3']) / 100,
+                'volume': (int(s['f5']) if s['f5'] != '-' else 0) * 100,
+                'amount': float(s['f6']) if s['f6'] != '-' else 0
+            } for s in clist if s['f2'] != '-' and s['f18'] != '-']
+        except Exception as e:
+            logger.warning(f'get_stocks_zdfrank error: {e}')
+
+            clist = iunCloud.get_stocks_zdfrank()
+            minzdf /= 100
+            if minzdf < 0:
+                clist = [s for s in clist if s['change'] <= minzdf]
+                clist = list(reversed(clist))
+            elif minzdf > 0:
+                clist = [s for s in clist if s['change'] >= minzdf]
+
+            result = [{
+                'code': asrt.get_fullcode(s['code']),
+                'name': s['name'],
+                'close': float(s['close']),
+                'high': float(s.get('high', 0)),
+                'low': float(s.get('low', 0)),
+                'open': float(s.get('open', 0)),
+                'lclose': float(s.get('lclose', 0)),
+                'change_px': float(s.get('change_px', 0)),
+                'change': float(s.get('change', 0)),
+                'volume': int(s.get('volume', 0)),
+                'amount': float(s.get('amount', 0))
+            } for s in clist]
+        return result
 
     @staticmethod
     def get_zdfb():

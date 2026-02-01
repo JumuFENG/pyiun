@@ -123,6 +123,7 @@ class GlobalStartup(BaseStrategy):
         logger.info("GlobalStartup init quotes for %d", len(quotes))
         iunCloud.get_financial_4season_losing()
         iunCloud.get_financial_cheating()
+        iunCloud.to_be_divided(c)
 
     async def openauction(self):
         iunCloud.get_hotstocks()
@@ -533,6 +534,9 @@ class StrategyI_Zt1WbOpen(MarketStrategy):
             code = c[-6:]
             if code in iunCloud.get_suspend_stocks():
                 logger.info('%s is suspended', code)
+                continue
+            if iunCloud.to_be_divided(code):
+                logger.info('%s to be divided', code)
                 continue
             canacc = account
             if account == '':
@@ -999,8 +1003,10 @@ class StrategyI_HotstocksRetryZt0(MarketStrategy):
     async def on_watcher(self, params):
         url = guang.join_url(iunCloud.dserver, f'stock?act=getistr&key={self.key}')
         rc = json.loads(guang.get_request(url))
-        stks = [c[-6:] for d,c, *_ in rc if c.startswith(('SH60', 'SZ00'))]
+        stks = [c[-6:] for d,c, *_ in rc]
+        stks = [c for c in stks if c.startswith(('60', '00'))]
         stks = [c for c in stks if c not in iunCloud.get_suspend_stocks()]
+        stks = [c for c in stks if not iunCloud.to_be_divided(c)]
         klPad.load_dsvr_klines(stks, 101, 32)
         qstks = [c for c in stks if not klPad.get_quotes(c)]
         if len(qstks) > 0:
