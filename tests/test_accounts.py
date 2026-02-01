@@ -15,7 +15,7 @@ from app.stock_strategy import StockStrategyFactory as sfac
 
 class TestAccounts(unittest.TestCase):
     def setUp(self):
-        accld.dserver = 'http://localhost:9112/'
+        accld.dserver = 'http://localhost:5188/'
         accld.headers = {
             'Authorization': f'''Basic {base64.b64encode("chuazhou@outlook.com:123456".encode()).decode()}'''
         }

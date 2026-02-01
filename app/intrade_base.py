@@ -484,7 +484,7 @@ class KlineJobProcess(JobProcess):
                 if _api in srtcfg['default_sources']:
                     _val = srtcfg['default_sources'][_api]
                     asrt.set_default_sources(_api, _val[0], tuple(_val[1]), _val[2])
-        asrt.set_array_format(srtcfg.get('array_format', 'df'))
+        asrt.set_array_format(srtcfg.get('array_format', 'json'))
 
     def process_job(self, codes: List[str]) -> Dict:
         return asrt.klines(codes, kltype=self.klt, length=32)
@@ -536,7 +536,7 @@ class QuoteJobProcess(JobProcess):
                 if _api in srtcfg['default_sources']:
                     _val = srtcfg['default_sources'][_api]
                     asrt.set_default_sources(_api, _val[0], tuple(_val[1]), _val[2])
-        asrt.set_array_format(srtcfg.get('array_format', 'df'))
+        asrt.set_array_format(srtcfg.get('array_format', 'json'))
 
     def process_job(self, codes: List[str]) -> Dict:
         return asrt.quotes(codes)

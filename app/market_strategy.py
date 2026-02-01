@@ -350,20 +350,27 @@ class StrategyI_EndFundFlow(MarketStrategy):
             if quotes['change'] > 0.05 or quotes['change'] < -0.05 or quotes['price'] < quotes['high'] * 0.95:
                 continue
             allkl = data['klines']
-            if allkl['time'].iloc[-1] == chkdate:
-                allkl = allkl.iloc[:-1]
+            if not isinstance(allkl, list):
+                try:
+                    allkl = [dict(r) for _, r in allkl.iterrows()]
+                except Exception:
+                    allkl = list(allkl)
+            if len(allkl) == 0:
+                continue
+            if allkl[-1]['time'] == chkdate:
+                allkl = allkl[:-1]
             if len(allkl) < 3:
                 continue
-            allkl = allkl.iloc[-3:]
-            if quotes['price'] > 1.1 * allkl['close'].iloc[0] or quotes['price'] < 0.95 * allkl['close'].iloc[0]:
+            allkl = allkl[-3:]
+            if quotes['price'] > 1.1 * allkl[0]['close'] or quotes['price'] < 0.95 * allkl[0]['close']:
                 continue
-            pchange1 = (allkl['close'].iloc[1] - allkl['close'].iloc[0]) / allkl['close'].iloc[0]
-            pchange2 = (allkl['close'].iloc[2] - allkl['close'].iloc[1]) /  allkl['close'].iloc[1]
+            pchange1 = (allkl[1]['close'] - allkl[0]['close']) / allkl[0]['close']
+            pchange2 = (allkl[2]['close'] - allkl[1]['close']) / allkl[1]['close']
             if pchange1 < -0.05 or pchange2 < -0.05:
                 continue
 
             code = c[-6:]
-            mfs = iunCloud.get_stock_fflow(code, allkl['time'].iloc[0], allkl['time'].iloc[-1])
+            mfs = iunCloud.get_stock_fflow(code, allkl[0]['time'], allkl[-1]['time'])
             if mfs is None or len(mfs) < len(allkl) or mfs[0][1] > 0:
                 # 仅选择连续三日净流入，如果mfs[0]也是净流入说明今天已经是第四天净流入了,排除
                 continue
@@ -483,7 +490,7 @@ class StrategyI_3Bull_Breakup(MarketStrategy):
             klines = klPad.get_klines(code, self.skltype)
             if len(klines) == 0:
                 continue
-            price = klines['close'].iloc[-1]
+            price = klines[-1]['close']
             if price < self.candidates[code]['high']:
                 continue
             price = min(price+0.02, klPad.get_zt_price(code))
@@ -946,18 +953,19 @@ class StrategyI_DtStocksUp(MarketStrategy):
             klines = klPad.get_klines(c, 101)
             if len(klines) <= 5:
                 continue
-            latestPrice = klines['close'].iloc[-1]
+            latestPrice = klines[-1]['close']
             # kl5 = klines[-6:-1]
-            mxHigh = klines['high'].iloc[-6:-1].max()
-            downp = (mxHigh - latestPrice) / mxHigh
-            mxVol = klines['volume'].iloc[-6:-1].max()
-            mnVol = klines['volume'].iloc[-2]
+            slice_ = klines[-6:-1]
+            mxHigh = max([r.get('high', 0) for r in slice_]) if slice_ else 0
+            downp = (mxHigh - latestPrice) / mxHigh if mxHigh else 0
+            mxVol = max([r.get('volume', 0) for r in slice_]) if slice_ else 0
+            mnVol = klines[-2].get('volume', 0)
             for i in range(-3, -7, -1):
-                if klines['volume'].iloc[i] < mnVol:
-                    mnVol = klines['volume'].iloc[i]
-                if klines['volume'].iloc[i] == mxVol:
+                if klines[i].get('volume', 0) < mnVol:
+                    mnVol = klines[i].get('volume', 0)
+                if klines[i].get('volume', 0) == mxVol:
                     break
-            downv = (mxVol - mnVol) / mxVol
+            downv = (mxVol - mnVol) / mxVol if mxVol else 0
             downpv.append((c, downp, downv))
         p3 = sorted(downpv, key=lambda x: x[1], reverse=True)[:3]
         p3 = [c[0] for c in p3]
@@ -1024,19 +1032,26 @@ class StrategyI_HotstocksRetryZt0(MarketStrategy):
             klines = klPad.get_klines(code, 101)
             if len(klines) < 1:
                 continue
-            if 'change' not in klines:
-                klines['change_px'] = klines['close'] - klines.shift(1)['close']
-                klines['change'] = klines['change_px'] / klines.shift(1)['close']
-            if klines['time'].iloc[-1] == dtody:
+            # compute change and change_px if missing
+            if len(klines) > 0 and 'change' not in klines[0]:
+                for i, r in enumerate(klines):
+                    if i == 0:
+                        r['change_px'] = 0
+                        r['change'] = 0
+                    else:
+                        r['change_px'] = r.get('close', 0) - klines[i-1].get('close', 0)
+                        prev_close = klines[i-1].get('close', 0)
+                        r['change'] = r['change_px'] / prev_close if prev_close else 0
+            if klines[-1]['time'] == dtody:
                 klines = klines[:-1]
             if len(klines) < 2:
                 continue
-            if klines['close'].iloc[-1] == klines['high'].iloc[-1] and round(klines['change'].iloc[-1], 2) == 0.10:
+            if klines[-1]['close'] == klines[-1]['high'] and round(klines[-1].get('change', 0), 2) == 0.10:
                 continue
-            if klines['close'].iloc[-2] == klines['high'].iloc[-2] and round(klines['change'].iloc[-2], 2) == 0.10:
+            if klines[-2]['close'] == klines[-2]['high'] and round(klines[-2].get('change', 0), 2) == 0.10:
                 continue
-            oprate = (klines['open'].iloc[-1] - klines['close'].iloc[-2]) / klines['close'].iloc[-2]
-            if klines['open'].iloc[-1] == klines['high'].iloc[-1] and klines['close'].iloc[-1] < klines['open'].iloc[-1] and round(oprate, 2) == 0.10:
+            oprate = (klines[-1].get('open', 0) - klines[-2].get('close', 0)) / (klines[-2].get('close', 1) or 1)
+            if klines[-1].get('open', 0) == klines[-1].get('high', 0) and klines[-1].get('close', 0) < klines[-1].get('open', 0) and round(oprate, 2) == 0.10:
                 continue
             zt_price = klPad.get_zt_price(code)
             if zt_price * 100 > 1.6 * float(iuncfg['amount']):

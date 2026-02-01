@@ -11,7 +11,7 @@ from app.iuncld import iunCloud
 
 class TestIuncloud(unittest.TestCase):
     def setUp(self):
-        iunCloud.dserver = 'http://localhost:9112/'
+        iunCloud.dserver = 'http://localhost:5188/'
 
     def test_check_bkignored(self):
         self.assertTrue(iunCloud.is_bk_ignored('BK0511'))

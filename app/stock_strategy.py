@@ -1,5 +1,4 @@
 import asyncio
-import pandas as pd
 from functools import lru_cache
 from app.lofig import logger, delayed_tasks
 from app.guang import guang
@@ -175,16 +174,16 @@ class FnPs:
         return max([rec['price'] for rec in buyrecs])
 
     @staticmethod
-    def bss18_buy_match(klines: pd.DataFrame):
-        if f'bss18' not in klines.columns:
+    def bss18_buy_match(klines):
+        if not klines or 'bss18' not in klines[0]:
             return False
-        return klines['bss18'].iloc[-1] == 'b'
+        return klines[-1].get('bss18') == 'b'
 
     @staticmethod
-    def bss18_sell_match(klines: pd.DataFrame):
-        if f'bss18' not in klines.columns:
+    def bss18_sell_match(klines):
+        if not klines or 'bss18' not in klines[0]:
             return False
-        return klines['bss18'].iat[-1] == 's'
+        return klines[-1].get('bss18') == 's'
 
     @staticmethod
     def get_sell_count_matched(buyrecs, selltype, price, fac=0):
@@ -248,7 +247,7 @@ class StrategyGE(StockStrategy):
             if FnPs.bss18_buy_match(klines):
                 # 建仓
                 tacc = smeta['account'] if 'account' in smeta else acc
-                StockStrategyFactory.planned_strategy_trade(acc, code, 'B', klines['close'].iloc[-1], 0, tacc)
+                StockStrategyFactory.planned_strategy_trade(acc, code, 'B', klines[-1]['close'], 0, tacc)
                 logger.info('建仓 %s %s %d %s %s', acc, code, lkltype, smeta, klines)
                 return
 
@@ -256,7 +255,7 @@ class StrategyGE(StockStrategy):
             # check ma1 buy
             klines1 = klPad.get_klines(code, self.skltype)
             if len(klines1) > 0:
-                klclose1 = klines1['close'].iloc[-1]
+                klclose1 = klines1[-1]['close']
                 mxprice = FnPs.max_buy_price(buydetails)
                 if 'inCritical' in smeta and smeta['inCritical']:
                     if klclose1 - (smeta['guardPrice'] - mxprice * smeta['stepRate'] * 0.16) > 0:
@@ -277,7 +276,7 @@ class StrategyGE(StockStrategy):
                     return
 
         if len(klines) > 0 and len(buydetails) > 0 and lkltype in kltypes and FnPs.bss18_sell_match(klines):
-            klclose = klines['close'].iloc[-1]
+            klclose = klines[-1]['close']
             if 'cutselltype' not in smeta:
                 smeta['cutselltype'] = 'egate'
             count = FnPs.get_sell_count_matched(buydetails, smeta['cutselltype'], klclose, smeta['stepRate'])
@@ -326,19 +325,19 @@ class StrategyBuySellBeforeEnd(StockStrategy):
         buydetails = StockStrategyFactory.get_buy_details(acc, code)
         smeta = StockStrategyFactory.get_strategy_meta(acc, code, self.key)
 
-        klclose = klines['close'].iloc[-1]
+        klclose = klines[-1]['close']
         if 'guardPrice' not in smeta:
             smeta['guardPrice'] = FnPs.buy_details_average_price(buydetails)
         if smeta['guardPrice'] > 0 and klclose > smeta['guardPrice'] * 0.92:
             return False
 
-        if klines['close'].iloc[-1] <= klines['ma5'].iloc[-1] or klines['close'].iloc[-2] < klines['ma5'].iloc[-2]:
+        if klines[-1]['close'] <= klines[-1]['ma5'] or klines[-2]['close'] < klines[-2]['ma5']:
             return False
 
-        if klines['close'].iloc[-1] > klines['ma5'].iloc[-1] * 1.06:
+        if klines[-1]['close'] > klines[-1]['ma5'] * 1.06:
             return False
 
-        if max(klines['close'].iloc[-3:-1]) > klines['ma5'].iloc[-1] * 1.1:
+        if max([r['close'] for r in klines[-3:-1]]) > klines[-1]['ma5'] * 1.1:
             return False
         if 'stepRate' not in smeta:
             smeta['stepRate'] = 0.08
@@ -373,12 +372,12 @@ class StrategyBuySellBeforeEnd(StockStrategy):
 
         if 'selltype' not in smeta:
             smeta['selltype'] = 'xsingle'
-        klclose = klines['close'].iloc[-1]
+        klclose = klines[-1]['close']
         count = FnPs.get_sell_count_matched(buydetails, smeta['selltype'], klclose)
         if count == 0:
             return False
 
-        if klines['close'].iloc[-1] > klines['ma5'].iloc[-1] or klines['close'].iloc[-2] > klines['ma5'].iloc[-2]:
+        if klines[-1]['close'] > klines[-1]['ma5'] or klines[-2]['close'] > klines[-2]['ma5']:
             return False
 
         logger.info('check_sell_before_end %s %s %d %s', acc, code, self.kltype, smeta)
@@ -443,7 +442,7 @@ class StrategySellMA(StockStrategy):
 
         klPad.calc_indicators(code, smeta['kltype'])
         klines = klPad.get_klines(code, smeta['kltype'])
-        klclose = klines['close'].iloc[-1]
+        klclose = klines[-1]['close']
         buydetails = StockStrategyFactory.get_buy_details(acc, code)
         if FnPs.bss18_sell_match(klines):
             count = FnPs.get_sell_count_matched(buydetails, smeta['selltype'], klclose, smeta['upRate'])
@@ -535,7 +534,7 @@ class StrategySellELShort(StockStrategy):
         if len(klines) == 0:
             return
 
-        klclose = klines['close'].iloc[-1]
+        klclose = klines[-1]['close']
         buydetails = StockStrategyFactory.get_buy_details(acc, code)
         smeta = StockStrategyFactory.get_strategy_meta(acc, code, self.key)
         if smeta is None:
@@ -562,7 +561,7 @@ class StrategySellELShort(StockStrategy):
 
         troughprice = klPad.get_last_trough(code, self.skltype)
         ztprice = klPad.get_zt_price(code)
-        if klclose == klines['low'].iloc[-1] and klclose >= ztprice and klclose * 0.98 >troughprice:
+        if klclose == klines[-1]['low'] and klclose >= ztprice and klclose * 0.98 > troughprice:
             troughprice = klclose * 0.96
         if troughprice > 0 and troughprice > smeta['guardPrice']:
             smeta['guardPrice'] = troughprice
@@ -585,7 +584,7 @@ class StrategySellBeforeEnd(StockStrategy):
         if len(klines) == 0:
             return
 
-        klclose = klines['close'].iloc[-1]
+        klclose = klines[-1]['close']
         buydetails = StockStrategyFactory.get_buy_details(acc, code)
         if FnPs.get_sell_count_matched(buydetails, 'all', klclose) == 0:
             return
@@ -610,9 +609,9 @@ class StrategySellBeforeEnd(StockStrategy):
         if len(klines) < 2:
             return
 
-        hinc = klines['high'].iloc[-1] > klines['high'].iloc[-2] or zt
-        linc = klines['low'].iloc[-1] > klines['low'].iloc[-2]
-        klopen = klines['open'].iloc[-1]
+        hinc = klines[-1]['high'] > klines[-2]['high'] or zt
+        linc = klines[-1]['low'] > klines[-2]['low']
+        klopen = klines[-1]['open']
         if smeta['sell_conds'] & conditions['h_and_l_dec']:
             # 最高价和最低价都不增加时卖出 阴线也卖出
             if (not hinc and not linc) or klclose < klopen:

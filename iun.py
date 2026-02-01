@@ -35,7 +35,7 @@ class iun:
         if 'default_sources' in srtcfg:
             for k, v in srtcfg['default_sources'].items():
                 asrt.set_default_sources(k, v[0], tuple(v[1]), v[2])
-        asrt.set_array_format(srtcfg.get('array_format', 'df'))
+        asrt.set_array_format(srtcfg.get('array_format', 'json'))
         accld.load_accounts()
 
         await mfac.start_all()

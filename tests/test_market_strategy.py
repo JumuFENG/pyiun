@@ -15,7 +15,8 @@ from app.iuncld import iunCloud
 
 class TestMarketStrategy(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        iunCloud.dserver = 'http://localhost:9112/'
+        iunCloud.dserver = 'http://localhost:5188/'
+        asrt.set_array_format('json')
 
         self._iun_str_conf_patcher = patch('app.iuncld.iunCloud.iun_str_conf')
         self.iun_str_conf = self._iun_str_conf_patcher.start()
@@ -28,6 +29,12 @@ class TestMarketStrategy(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self._iun_str_conf_patcher.stop()
         self.submit_trade_patcher.stop()
+
+    async def test_GlobalStartup(self):
+        strategy = GlobalStartup()
+        await strategy.start_strategy_tasks()
+        await strategy.watcher.execute_task()
+        await strategy.twatcher.execute_task()
 
     @unittest.skip('not implemented for StockAuctionUpSelector')
     async def test_StrategyI_AuctionUp(self):
@@ -88,7 +95,6 @@ class TestMarketStrategy(unittest.IsolatedAsyncioTestCase):
     @unittest.skip("need to get fund flow history data")
     async def test_StrategyI_EndFundFlow(self):
         strategy = StrategyI_EndFundFlow()
-        asrt.set_array_format('df')
         await strategy.start_strategy_tasks()
         await strategy.watcher.execute_task()
 
@@ -98,7 +104,6 @@ class TestMarketStrategy(unittest.IsolatedAsyncioTestCase):
         await strategy.watcher.execute_task()
 
     async def test_StrategyI_HotstocksRetryZt0(self):
-        asrt.set_array_format('df')
         strategy = StrategyI_HotstocksRetryZt0()
         await strategy.start_strategy_tasks()
         await strategy.watcher.execute_task()
@@ -107,5 +112,5 @@ class TestMarketStrategy(unittest.IsolatedAsyncioTestCase):
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestMarketStrategy('test_StrategyI_AuctionUp'))
+    suite.addTest(TestMarketStrategy('test_GlobalStartup'))
     unittest.TextTestRunner().run(suite)
