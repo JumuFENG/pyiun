@@ -46,8 +46,13 @@ class TestIuncloud(unittest.TestCase):
     def test_get_dailyztsteps_gt3(self):
         self.assertIsInstance(iunCloud.get_dailyztsteps_gt3(), list)
 
+    def test_get_financial_4season_losing(self):
+        result = iunCloud.get_financial_4season_losing()
+        self.assertIsInstance(result, tuple)
+
+
 if __name__ == '__main__':
-    unittest.main()
-    # suite = unittest.TestSuite()
-    # suite.addTest(TestIuncloud('test_get_dailyztsteps_gt3'))
-    # unittest.TextTestRunner().run(suite)
+    # unittest.main()
+    suite = unittest.TestSuite()
+    suite.addTest(TestIuncloud('test_get_financial_4season_losing'))
+    unittest.TextTestRunner().run(suite)

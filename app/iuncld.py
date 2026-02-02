@@ -1,6 +1,5 @@
 import json
 import stockrt as asrt
-from pywencai import get as search_wencai
 from app.trade_interface import TradeInterface
 from functools import lru_cache
 from threading import Lock
@@ -9,6 +8,13 @@ from stockrt.sources.eastmoney import Em
 from app.lofig import logger
 from app.guang import guang
 from app.klpad import klPad
+import importlib.util
+if importlib.util.find_spec("pywencai"):
+    from pywencai import get as search_wencai
+else:
+    from emxg import search_emxg
+    def search_wencai(query, loop=False):
+        return search_emxg(query)
 
 
 class iunCloud:
@@ -307,7 +313,7 @@ class iunCloud:
         try:
             pdata = search_wencai(query='连续4个季度亏损大于1000万', loop=True)
             logger.info('连续4个季度亏损大于1000万: %d', len(pdata))
-            return tuple(pdata['code'])
+            return tuple(pdata['code'] if 'code' in pdata.columns else pdata['代码'])
         except Exception as e:
             logger.info('search_wencai error: %s', e)
             url = guang.join_url(iunCloud.dserver, 'stock?act=f4lost')
@@ -318,8 +324,8 @@ class iunCloud:
     def get_financial_cheating(cls):
         try:
             pdata = search_wencai(query='财务造假', loop=True)
-            logger.info('财务造假: %d', len(pdata['code']))
-            return tuple(pdata['code'])
+            logger.info('财务造假: %d', len(pdata))
+            return tuple(pdata['code'] if 'code' in pdata.columns else pdata['代码'])
         except Exception as e:
             logger.info('search_wencai error: %s', e)
             return tuple()
