@@ -112,5 +112,5 @@ class TestMarketStrategy(unittest.IsolatedAsyncioTestCase):
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestMarketStrategy('test_GlobalStartup'))
+    suite.addTest(TestMarketStrategy('test_StrategyI_HotstocksRetryZt0'))
     unittest.TextTestRunner().run(suite)

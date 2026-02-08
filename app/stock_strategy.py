@@ -10,8 +10,8 @@ from app.trade_interface import TradeInterface
 
 class StockStrategyFactory:
     stocks = {}
-    @lru_cache(maxsize=None)
     @staticmethod
+    @lru_cache(maxsize=None)
     def get_strategy(k, formkt=''):
         s = None
         if k == StrategyGE.key:
@@ -35,7 +35,8 @@ class StockStrategyFactory:
             try:
                 # 检查是否在asyncio上下文中
                 loop = asyncio.get_running_loop()
-                asyncio.create_task(s.start_strategy_tasks())
+                stask = asyncio.create_task(s.start_strategy_tasks())
+                delayed_tasks.append(stask)
             except RuntimeError:
                 # 不在asyncio上下文中，延迟到后续处理
                 delayed_tasks.append(s.start_strategy_tasks())

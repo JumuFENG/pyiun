@@ -2,6 +2,7 @@ import time, json
 import concurrent.futures
 import stockrt as asrt
 from functools import cached_property
+from traceback import format_exc
 from app.lofig import logger
 from app.guang import guang
 from app.intrade_base import BaseStrategy, Watcher_Once, WatcherFactory as wfac
@@ -763,6 +764,7 @@ class StrategyI_HotStocksOpen(MarketStrategy):
             return dtcnt_open <= 3 or dtcnt_open < self.lastzdt[3]
         except Exception as e:
             logger.error(f'Error checking open environment: {e}')
+            logger.debug(format_exc())
             return False
 
     async def on_watcher(self):
@@ -1023,6 +1025,7 @@ class StrategyI_HotstocksRetryZt0(MarketStrategy):
                 klPad.cache(c, quotes=q)
         dtody = guang.today_date('-')
         iuncfg = iunCloud.iun_str_conf(self.key)
+        iuncfg = sfac.parse_number_in_strategies({'cfg': iuncfg}).get('cfg', {})
         candidates = []
         for code in stks:
             q = klPad.get_quotes(code)

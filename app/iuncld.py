@@ -1,20 +1,15 @@
 import json
+import emxg
 import stockrt as asrt
-from app.trade_interface import TradeInterface
 from functools import lru_cache
 from threading import Lock
 from datetime import datetime, timedelta
 from stockrt.sources.eastmoney import Em
+from app.trade_interface import TradeInterface
 from app.lofig import logger
 from app.guang import guang
 from app.klpad import klPad
-import importlib.util
-if importlib.util.find_spec("pywencai"):
-    from pywencai import get as search_wencai
-else:
-    from emxg import search_emxg
-    def search_wencai(query, loop=False):
-        return search_emxg(query)
+
 
 
 class iunCloud:
@@ -183,6 +178,31 @@ class iunCloud:
         return values
 
     @staticmethod
+    def get_emxg_stock_zdfrank(minzdf=None):
+        if minzdf is None:
+            return []
+
+        pdata = emxg.search(keyword=f'涨跌幅>{minzdf}%' if minzdf > 0 else f'涨跌幅<{minzdf}%')
+        pdata = pdata.rename(columns = {
+            '代码': 'code', '名称': 'name', '股票简称': 'name', '最新价': 'close', '涨跌额': 'change_px', '涨跌幅': 'change',
+            '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
+            '最高价:前复权': 'high', '最高价(日线不复权)': 'high', '最低价:前复权': 'low', '最低价(日线不复权)': 'low', '成交额': 'amount'
+        })
+        pdata = emxg.convert_column(pdata, 'code', asrt.get_fullcode)
+        if 'lclose' not in pdata.columns:
+            if 'change_px' not in pdata.columns:
+                pdata['lclose'] = pdata['close'] / (1 + pdata['change'])
+                pdata['change_px'] = pdata['close'] - pdata['lclose']
+            else:
+                pdata['lclose'] = pdata['close'] - pdata['change_px']
+        if 'amount' not in pdata.columns:
+            pdata['amount'] = pdata['close'] * pdata['volume']
+        if 'open' not in pdata.columns:
+            pdata['open'] = pdata['lclose']
+        result = pdata[['code', 'name', 'close', 'high', 'low', 'open', 'change', 'volume', 'amount', 'change_px', 'lclose']].to_dict('records')
+        return result
+
+    @staticmethod
     def get_stocks_zdfrank(minzdf=None):
         if minzdf is None:
             stocks = asrt.stock_list()
@@ -191,27 +211,29 @@ class iunCloud:
             return stocks['all']
 
         try:
-            clist = Em.qt_clist(
-                fs='m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2',
-                fields='f1,f2,f3,f4,f5,f6,f15,f16,f17,f18,f12,f13,f14',
-                fid='f3', po=1 if minzdf > 0 else 0,
-                qtcb=lambda data: any(abs(d['f3']) < abs(minzdf) for d in data)
-            )
-            if not clist:
-                raise Exception('No data from Em.qt_clist')
-            result = [{
-                'code': asrt.get_fullcode(s['f12']),
-                'name': s['f14'],
-                'close': float(s['f2']),
-                'high': float(s['f15']) if s['f15'] != '-' else 0,
-                'low': float(s['f16']) if s['f16'] != '-' else 0,
-                'open': float(s['f17']) if s['f17'] != '-' else 0,
-                'lclose': float(s['f18']),
-                'change_px': float(s['f4']),
-                'change': float(s['f3']) / 100,
-                'volume': (int(s['f5']) if s['f5'] != '-' else 0) * 100,
-                'amount': float(s['f6']) if s['f6'] != '-' else 0
-            } for s in clist if s['f2'] != '-' and s['f18'] != '-']
+            result = iunCloud.get_emxg_stock_zdfrank(minzdf=minzdf)
+            if not result:
+                clist = Em.qt_clist(
+                    fs='m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2',
+                    fields='f1,f2,f3,f4,f5,f6,f15,f16,f17,f18,f12,f13,f14',
+                    fid='f3', po=1 if minzdf > 0 else 0,
+                    qtcb=lambda data: any(abs(d['f3']) < abs(minzdf) for d in data)
+                )
+                if not clist:
+                    raise Exception('No data from Em.qt_clist')
+                result = [{
+                    'code': asrt.get_fullcode(s['f12']),
+                    'name': s['f14'],
+                    'close': float(s['f2']),
+                    'high': float(s['f15']) if s['f15'] != '-' else 0,
+                    'low': float(s['f16']) if s['f16'] != '-' else 0,
+                    'open': float(s['f17']) if s['f17'] != '-' else 0,
+                    'lclose': float(s['f18']),
+                    'change_px': float(s['f4']),
+                    'change': float(s['f3']) / 100,
+                    'volume': (int(s['f5']) if s['f5'] != '-' else 0) * 100,
+                    'amount': float(s['f6']) if s['f6'] != '-' else 0
+                } for s in clist if s['f2'] != '-' and s['f18'] != '-']
         except Exception as e:
             logger.warning(f'get_stocks_zdfrank error: {e}')
 
@@ -311,11 +333,12 @@ class iunCloud:
     @lru_cache(maxsize=1)
     def get_financial_4season_losing(cls):
         try:
-            pdata = search_wencai(query='连续4个季度亏损大于1000万', loop=True)
+            pdata = emxg.search(keyword='连续4个季度亏损大于1000万')
+            pdata.rename(columns = {'代码': 'code'})
             logger.info('连续4个季度亏损大于1000万: %d', len(pdata))
-            return tuple(pdata['code'] if 'code' in pdata.columns else pdata['代码'])
+            return tuple(pdata['code'])
         except Exception as e:
-            logger.info('search_wencai error: %s', e)
+            logger.info('emxg.search error: %s', e)
             url = guang.join_url(iunCloud.dserver, 'stock?act=f4lost')
             return tuple([c[-6:] for c in json.loads(guang.get_request(url))])
 
@@ -323,11 +346,12 @@ class iunCloud:
     @lru_cache(maxsize=1)
     def get_financial_cheating(cls):
         try:
-            pdata = search_wencai(query='财务造假', loop=True)
+            pdata = emxg.search(keyword='财务造假')
+            pdata.rename(columns = {'代码': 'code'})
             logger.info('财务造假: %d', len(pdata))
-            return tuple(pdata['code'] if 'code' in pdata.columns else pdata['代码'])
+            return tuple(pdata['code'])
         except Exception as e:
-            logger.info('search_wencai error: %s', e)
+            logger.info('emxg.search error: %s', e)
             return tuple()
 
     @classmethod

@@ -39,7 +39,7 @@ class Watcher_Once:
             await self.execute_task()
         except Exception as e:
             logger.error(f'{e}')
-            logger.error(traceback.format_exc())
+            logger.debug(traceback.format_exc())
         self.notify_stop()
 
     async def execute_task(self):
@@ -51,7 +51,7 @@ class Watcher_Once:
                 await listener.on_watcher(params)
             except Exception as e:
                 logger.error(f'{e}')
-                logger.error(traceback.format_exc())
+                logger.debug(traceback.format_exc())
 
     def notify_stop(self):
         for listener in self.listeners:
@@ -109,7 +109,7 @@ class Watcher_Cycle(Watcher_Once):
                 logger.error(f'ConnectionError: {e}')
             except Exception as e:
                 logger.error(e)
-                logger.error(traceback.format_exc())
+                logger.debug(traceback.format_exc())
 
             # 计算下次执行的延迟时间
             sleep_duration = self._calculate_next_sleep_duration()
@@ -254,13 +254,13 @@ class SubProcess_Watcher_Cycle(Watcher_Cycle):
                         break
                     except Exception as e:
                         logger.error(f"Error processing result data: {e}")
-                        logger.error(traceback.format_exc())
+                        logger.debug(traceback.format_exc())
 
                 await asyncio.sleep(0.1)  # 更短的睡眠时间
 
             except Exception as e:
                 logger.error(f"Error in result checking loop: {e}")
-                logger.error(traceback.format_exc())
+                logger.debug(traceback.format_exc())
                 await asyncio.sleep(1)  # 出错时等待更长时间
 
     async def handle_process_result(self, result):
@@ -309,7 +309,7 @@ class SubProcess_Watcher_Cycle(Watcher_Cycle):
             logger.info(f"Sub process {self.sub_process.__class__.__name__} started")
         except Exception as e:
             logger.error(f"Failed to start sub process: {e}")
-            logger.error(traceback.format_exc())
+            logger.debug(traceback.format_exc())
             self.sub_process = None
 
     def _stop_process(self):

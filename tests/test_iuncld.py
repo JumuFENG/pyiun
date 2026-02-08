@@ -41,7 +41,8 @@ class TestIuncloud(unittest.TestCase):
         self.assertIsInstance(iunCloud.get_stock_fflow('000001'), list)
 
     def test_get_dailyzdt(self):
-        self.assertIsInstance(iunCloud.get_dailyzdt(), list)
+        r = iunCloud.get_dailyzdt()
+        self.assertIsInstance(r, list)
 
     def test_get_dailyztsteps_gt3(self):
         self.assertIsInstance(iunCloud.get_dailyztsteps_gt3(), list)
@@ -49,6 +50,10 @@ class TestIuncloud(unittest.TestCase):
     def test_get_financial_4season_losing(self):
         result = iunCloud.get_financial_4season_losing()
         self.assertIsInstance(result, tuple)
+
+    def test_get_stocks_zdfrank(self):
+        result = iunCloud.get_emxg_stock_zdfrank(minzdf=-8)
+        self.assertIsInstance(result, list)
 
 
 if __name__ == '__main__':
