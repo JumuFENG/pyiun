@@ -48,6 +48,9 @@ class iun:
                 if isinstance(result, Exception):
                     logger.error(f"Delayed task {i} failed: {result}")
                     logger.error(traceback.format_exc())
+            wseconds = guang.delay_seconds('15:01')
+            if wseconds > 0:
+                await asyncio.sleep(wseconds)
             accld.verify_strategies()
 
         logger.info("iun main exited.")

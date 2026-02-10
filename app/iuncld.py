@@ -188,17 +188,18 @@ class iunCloud:
             '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
             '最高价:前复权': 'high', '最高价(日线不复权)': 'high', '最低价:前复权': 'low', '最低价(日线不复权)': 'low', '成交额': 'amount'
         })
-        pdata = emxg.convert_column(pdata, 'code', asrt.get_fullcode)
+        pdata = pdata.assign(code=lambda x: x['code'].apply(asrt.get_fullcode) if hasattr(x['code'], 'apply') else asrt.get_fullcode(x['code']))
         if 'lclose' not in pdata.columns:
             if 'change_px' not in pdata.columns:
-                pdata['lclose'] = pdata['close'] / (1 + pdata['change'])
-                pdata['change_px'] = pdata['close'] - pdata['lclose']
+                pdata = pdata.assign(lclose=lambda x: x['close'] / (1 + x['change']))
+                pdata = pdata.assign(change_px=lambda x: x['close'] - x['lclose'])
             else:
-                pdata['lclose'] = pdata['close'] - pdata['change_px']
+                pdata = pdata.assign(lclose=lambda x: x['close'] - x['change_px'])
+
         if 'amount' not in pdata.columns:
-            pdata['amount'] = pdata['close'] * pdata['volume']
+            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'])
         if 'open' not in pdata.columns:
-            pdata['open'] = pdata['lclose']
+            pdata = pdata.assign(open=lambda x: x['lclose'])
         result = pdata[['code', 'name', 'close', 'high', 'low', 'open', 'change', 'volume', 'amount', 'change_px', 'lclose']].to_dict('records')
         return result
 
@@ -334,7 +335,7 @@ class iunCloud:
     def get_financial_4season_losing(cls):
         try:
             pdata = emxg.search(keyword='连续4个季度亏损大于1000万')
-            pdata.rename(columns = {'代码': 'code'})
+            pdata = pdata.rename(columns = {'代码': 'code'})
             logger.info('连续4个季度亏损大于1000万: %d', len(pdata))
             return tuple(pdata['code'])
         except Exception as e:
@@ -347,7 +348,7 @@ class iunCloud:
     def get_financial_cheating(cls):
         try:
             pdata = emxg.search(keyword='财务造假')
-            pdata.rename(columns = {'代码': 'code'})
+            pdata = pdata.rename(columns = {'代码': 'code'})
             logger.info('财务造假: %d', len(pdata))
             return tuple(pdata['code'])
         except Exception as e:
