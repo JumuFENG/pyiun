@@ -160,7 +160,7 @@ class Account(object):
                     old_top = float(sobj['topprice'])
                 if sobj['enabled']:
                     enable_strategies.append(sobj['key'])
-        if old_top > sqt['price']*1.05:
+        if old_top > sqt['price']*1.05 or old_top == 0:
             return False
 
         if len(enable_strategies) == 1 and enable_strategies[0] in self.recycle_strs:

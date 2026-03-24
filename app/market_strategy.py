@@ -538,6 +538,7 @@ class StrategyI_Zt1WbOpen(MarketStrategy):
             return
         iuncfg = iunCloud.iun_str_conf(self.key)
         account = iuncfg.get('account', '')
+        amount = iuncfg.get('amount', 10000)
         for c in rc:
             code = c[-6:]
             if code in iunCloud.get_suspend_stocks():
@@ -552,7 +553,7 @@ class StrategyI_Zt1WbOpen(MarketStrategy):
             elif account == 'credit':
                 if not iunCloud.is_rzrq(code):
                     continue
-            self.candidates[code] = {'account': canacc}
+            self.candidates[code] = {'account': canacc, 'amount': amount}
 
     async def on_watcher(self):
         stocks = [c for c in self.candidates if c not in self.stock_notified]
@@ -567,6 +568,9 @@ class StrategyI_Zt1WbOpen(MarketStrategy):
             if (self.pupfix > 1 and ochange < 0) or (self.pupfix == 1 and ochange < -0.03):
                 continue
             price = oprice if self.pupfix == 1 else min(round(oprice * self.pupfix, 2), q['top_price'])
+            if price * 100 > 1.6 * float(self.candidates[c]['amount']):
+                logger.info('%s %s price too high: %.2f amount: %s', c, q['name'], price, self.candidates[c]['amount'])
+                continue
             mdata = {'code': c, 'price': price}
             mdata['strategies'] = {'StrategySellELS': {'topprice': round(price * 1.05, 2)}}
             await self.on_intrade_matched(self.key, mdata)

@@ -3,6 +3,7 @@ import emxg
 import stockrt as asrt
 from functools import lru_cache
 from threading import Lock
+from traceback import format_exc
 from datetime import datetime, timedelta
 from stockrt.sources.eastmoney import Em
 from app.trade_interface import TradeInterface
@@ -188,6 +189,8 @@ class iunCloud:
             '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
             '最高价:前复权': 'high', '最高价(日线不复权)': 'high', '最低价:前复权': 'low', '最低价(日线不复权)': 'low', '成交额': 'amount'
         })
+        if 'close' not in pdata.columns:
+            return []
         pdata = pdata.assign(code=lambda x: x['code'].apply(asrt.get_fullcode) if hasattr(x['code'], 'apply') else asrt.get_fullcode(x['code']))
         if 'lclose' not in pdata.columns:
             if 'change_px' not in pdata.columns:
@@ -197,9 +200,13 @@ class iunCloud:
                 pdata = pdata.assign(lclose=lambda x: x['close'] - x['change_px'])
 
         if 'amount' not in pdata.columns:
-            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'])
+            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'] if x['close'] and x['volume'] else 0)
         if 'open' not in pdata.columns:
             pdata = pdata.assign(open=lambda x: x['lclose'])
+        if 'high' not in pdata.columns:
+            pdata = pdata.assign(high=lambda x: x['close'])
+        if 'low' not in pdata.columns:
+            pdata = pdata.assign(low=lambda x: x['close'])
         result = pdata[['code', 'name', 'close', 'high', 'low', 'open', 'change', 'volume', 'amount', 'change_px', 'lclose']].to_dict('records')
         return result
 
@@ -237,6 +244,7 @@ class iunCloud:
                 } for s in clist if s['f2'] != '-' and s['f18'] != '-']
         except Exception as e:
             logger.warning(f'get_stocks_zdfrank error: {e}')
+            logger.debug(format_exc())
 
             clist = iunCloud.get_stocks_zdfrank()
             minzdf /= 100

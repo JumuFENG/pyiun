@@ -60,6 +60,8 @@ class Config:
 
     @classmethod
     def simple_decrypt(self, etxt):
+        if '*' not in etxt:
+            return etxt
         r = etxt.rfind('*')
         etxt = etxt[r:]
         x = base64.b64decode(etxt.encode('utf-8'))

@@ -261,6 +261,8 @@ class klPad:
             return {}
         klines = self.dsvr_source().klines(stocks, kltype, length, fq)
         chgklt = {}
+        if klines is None:
+            return chgklt
         for c, k in klines.items():
             chgklt[c] = self.cache(c, k, kltype=kltype)
         return chgklt
