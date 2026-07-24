@@ -1036,6 +1036,7 @@ class StrategyI_HotstocksRetryZt0(MarketStrategy):
             if iunCloud.financial_block(code):
                 continue
             # 排除近两天涨停的，排除昨天开盘涨停收盘不涨停的
+            klPad.calc_ma(code, 101, 20)
             klines = klPad.get_klines(code, 101)
             if len(klines) < 1:
                 continue
@@ -1061,9 +1062,19 @@ class StrategyI_HotstocksRetryZt0(MarketStrategy):
             if klines[-1].get('open', 0) == klines[-1].get('high', 0) and klines[-1].get('close', 0) < klines[-1].get('open', 0) and round(oprate, 2) == 0.10:
                 continue
             zt_price = klPad.get_zt_price(code)
+            ma20 = klines[-1].get('ma20', 0)
+            if  0 < ma20 < 0.87 * klines[-1]['close']:
+                logger.info('%s %s MA drop too much: %.2f ma20: %.2f lclose: %.2f zt_price: %.2f', self.key, code, klines[-1]['close'] - ma20, ma20, klines[-1]['close'], zt_price)
+                continue
             if zt_price * 100 > 1.6 * float(iuncfg['amount']):
                 logger.info('%s %s price too high: %.2f amount: %s', self.key, code, zt_price, iuncfg['amount'])
                 continue
+            account = iuncfg.get('account', '')
+            if account == '':
+                iuncfg['account'] = 'credit' if iunCloud.is_rzrq(code) else 'normal'
+            elif account == 'credit':
+                if not iunCloud.is_rzrq(code):
+                    continue
             sdata = {'StrategyBuyZTBoard':{}}
             strategy = guang.generate_strategy_json({'code': code, 'price': zt_price, 'strategies': sdata}, iuncfg)
             account = iunCloud.get_hold_account(code, iuncfg['account'])

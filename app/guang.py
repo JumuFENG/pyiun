@@ -92,9 +92,9 @@ class guang:
         }
         if 'price' in match_data:
             strobjs['StrategySellELS']["topprice"] = round(float(match_data['price']) * 1.05, 2)
-        if 'account' in subscribe_detail and subscribe_detail['account'] == 'collat':
-            strobjs['StrategyBuyZTBoard']['account'] = 'collat'
-            strobjs['StrategyBuyDTBoard']['account'] = 'collat'
+        if 'account' in subscribe_detail and subscribe_detail['account'] in ('collat', 'credit'):
+            strobjs['StrategyBuyZTBoard']['account'] = subscribe_detail['account']
+            strobjs['StrategyBuyDTBoard']['account'] = subscribe_detail['account']
         if 'strategies' in match_data:
             mstrategies = match_data['strategies']
             for i, mk in enumerate(mstrategies):

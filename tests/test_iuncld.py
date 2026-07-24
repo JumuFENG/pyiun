@@ -45,19 +45,20 @@ class TestIuncloud(unittest.TestCase):
         self.assertIsInstance(r, list)
 
     def test_get_dailyztsteps_gt3(self):
-        self.assertIsInstance(iunCloud.get_dailyztsteps_gt3(), list)
+        dzsgt3 = iunCloud.get_dailyztsteps_gt3()
+        self.assertIsInstance(dzsgt3, list)
 
     def test_get_financial_4season_losing(self):
         result = iunCloud.get_financial_4season_losing()
         self.assertIsInstance(result, tuple)
 
     def test_get_stocks_zdfrank(self):
-        result = iunCloud.get_emxg_stock_zdfrank(minzdf=-8)
+        result = iunCloud.get_emxg_stock_zdfrank(minzdf=8)
         self.assertIsInstance(result, list)
 
 
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestIuncloud('test_get_financial_4season_losing'))
+    suite.addTest(TestIuncloud('test_get_dailyztsteps_gt3'))
     unittest.TextTestRunner().run(suite)

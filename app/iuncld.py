@@ -184,6 +184,8 @@ class iunCloud:
             return []
 
         pdata = emxg.search(keyword=f'涨跌幅>{minzdf}%' if minzdf > 0 else f'涨跌幅<{minzdf}%')
+        if pdata is None or pdata.empty:
+            return []
         pdata = pdata.rename(columns = {
             '代码': 'code', '名称': 'name', '股票简称': 'name', '最新价': 'close', '涨跌额': 'change_px', '涨跌幅': 'change',
             '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
@@ -356,6 +358,8 @@ class iunCloud:
     def get_financial_cheating(cls):
         try:
             pdata = emxg.search(keyword='财务造假')
+            if pdata is None or pdata.empty:
+                return tuple()
             pdata = pdata.rename(columns = {'代码': 'code'})
             logger.info('财务造假: %d', len(pdata))
             return tuple(pdata['code'])
